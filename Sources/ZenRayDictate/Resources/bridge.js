@@ -49,14 +49,25 @@
 
   const PAD = 12;   // margin kept around the pill so its shadow has room
 
-  const compact = () => {
+  const findTarget = () => {
     const anchor =
       document.querySelector('#prompt-textarea') ||
       document.querySelector('div[contenteditable="true"]');
-    if (!anchor) return false;
+    if (!anchor) return null;
+    return anchor.closest('form') || anchor.parentElement;
+  };
 
-    const target = anchor.closest('form') || anchor.parentElement;
-
+  // Applies the hiding/flattening rules to whatever the composer's ancestor
+  // chain is RIGHT NOW. Idempotent and cheap, safe to call as often as needed.
+  //
+  // It has to be, because ChatGPT swaps in a different DOM subtree for the
+  // recording UI (the black pill with the live waveform) than for the idle
+  // typing box. Styling was only ever applied once, when the page first
+  // loaded in the idle state, so the moment dictation actually started, a
+  // freshly mounted, unstyled wrapper appeared around the pill and painted
+  // whatever glow or shadow it carries on the real page's white background,
+  // where it normally blends in and is invisible.
+  const neutralizeChain = (target) => {
     const chain = [];
     for (let n = target; n && n !== document.documentElement; n = n.parentElement) {
       chain.push(n);
@@ -84,12 +95,6 @@
       n.style.setProperty('backdrop-filter', 'none', 'important');
       n.style.setProperty('transform', 'none', 'important');
       n.style.setProperty('inset', 'auto', 'important');
-      // Whatever painted the stray blurred shape below the pill (a
-      // pseudo-element glow, a filter, a decorative background) is either
-      // neutralized above or, if it comes from somewhere `style.setProperty`
-      // cannot reach such as a ::before, clipped here: overflow:hidden cuts
-      // any paint effect at this box's own edge regardless of what produced
-      // it, without touching the real, in-flow content inside.
       n.style.setProperty('overflow', 'hidden', 'important');
     });
 
@@ -108,51 +113,66 @@
       `;
       document.head.appendChild(style);
     }
+  };
 
-    // Resizing the macOS window changes the viewport width WKWebView renders
-    // at, which can reflow this very element, which re-fires the observer
-    // below, which resizes the window again: a feedback loop that redrew the
-    // UI on every tick. Two guards break it. A report is dropped if it does
-    // not differ from the last one SENT by more than a couple of pixels, so
-    // rounding noise from the resize round trip cannot re-trigger anything.
-    // And bursts of observer callbacks (several per animation frame while
-    // text reflows) are coalesced to one report per 120ms.
-    let lastSent = { width: 0, height: 0 };
-    let debounceTimer = null;
+  // Resizing the macOS window changes the viewport width WKWebView renders
+  // at, which can reflow the composer, which re-fires the resize watcher
+  // below, which resizes the window again: a feedback loop that redrew the
+  // UI on every tick. A report is dropped if it does not differ from the
+  // last one SENT by more than a couple of pixels, and bursts are coalesced
+  // to one report per 120ms.
+  let lastSent = { width: 0, height: 0 };
+  let debounceTimer = null;
+  let resizeObserver = null;
 
-    const report = () => {
-      const r = target.getBoundingClientRect();
-      if (r.height < 20) return;
-      const width = Math.ceil(r.width) + PAD * 2;
-      const height = Math.ceil(r.height) + PAD * 2;
-      if (Math.abs(width - lastSent.width) < 3 && Math.abs(height - lastSent.height) < 3) return;
-      lastSent = { width, height };
-      send('compact', JSON.stringify({ width, height }));
-    };
+  const report = (target) => {
+    const r = target.getBoundingClientRect();
+    if (r.height < 20) return;
+    const width = Math.ceil(r.width) + PAD * 2;
+    const height = Math.ceil(r.height) + PAD * 2;
+    if (Math.abs(width - lastSent.width) < 3 && Math.abs(height - lastSent.height) < 3) return;
+    lastSent = { width, height };
+    send('compact', JSON.stringify({ width, height }));
+  };
+
+  const compact = () => {
+    const target = findTarget();
+    if (!target) return false;
+
+    neutralizeChain(target);
 
     const reportDebounced = () => {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(report, 120);
+      debounceTimer = setTimeout(() => report(target), 120);
     };
+    setTimeout(() => report(target), 200);
+    setTimeout(() => report(target), 1000);
 
-    setTimeout(report, 200);
-    setTimeout(report, 1000);
-
-    // A dictation that runs long turns the composer into several lines. The
-    // two timed reports above only ever caught the bar's size at load time,
-    // so the macOS window stayed frozen at its first, one line height and
-    // clipped everything typed after that. Watching the box itself keeps the
-    // window matched to the content for as long as dictation runs, now
-    // debounced and threshold-gated so it settles instead of oscillating.
-    if (!window.__zrResizeObserver) {
-      window.__zrResizeObserver = new ResizeObserver(reportDebounced);
-      window.__zrResizeObserver.observe(target);
-    }
+    // A dictation that runs long turns the composer into several lines; watch
+    // the box itself so the window keeps matching it. `target` can be a new
+    // DOM node each time compact() runs (see neutralizeChain above), so the
+    // observer is redirected to it rather than created once and forgotten.
+    if (!resizeObserver) resizeObserver = new ResizeObserver(reportDebounced);
+    resizeObserver.disconnect();
+    resizeObserver.observe(target);
 
     return true;
   };
 
   window.__zrCompact = compact;
+
+  // React swaps the composer's DOM subtree between the idle and recording
+  // states (see neutralizeChain's comment), so styling once at page load is
+  // not enough: this catches every later swap and re-applies the same rules
+  // to whatever just got mounted. `attributes` is deliberately left out —
+  // our own style.setProperty calls only ever touch attributes, never add or
+  // remove nodes, so they cannot re-trigger this observer themselves.
+  let mutationTimer = null;
+  const domObserver = new MutationObserver(() => {
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(compact, 80);
+  });
+  domObserver.observe(document.body, { childList: true, subtree: true });
 
   // --- 3. drive dictation from Cmd+D -------------------------------------
 
