@@ -45,12 +45,23 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> Signing"
-# A stable ad-hoc signature is what lets macOS remember the Accessibility and
+# A stable ad-hoc identifier is what lets macOS remember the Accessibility and
 # microphone grants across rebuilds.
+#
+# The entitlements are not optional: under the hardened runtime, an app without
+# com.apple.security.device.audio-input is denied the microphone before TCC is
+# consulted, so it never appears in System Settings > Privacy > Microphone at
+# all. That is the failure this file exists to prevent.
 codesign --force --deep --sign - \
     --identifier "$BUNDLE_ID" \
     --options runtime \
-    "$APP" 2>/dev/null || codesign --force --deep --sign - --identifier "$BUNDLE_ID" "$APP"
+    --entitlements Entitlements.plist \
+    "$APP"
+
+echo "==> Checking the microphone entitlement really landed"
+codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "audio-input" \
+    && echo "    ok" \
+    || { echo "    MISSING, the microphone will not work"; exit 1; }
 
 echo
 echo "Built $(pwd)/$APP"
