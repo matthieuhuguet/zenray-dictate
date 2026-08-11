@@ -1,9 +1,12 @@
-// Injected into chatgpt.com at document start.
+// Injected into chatgpt.com at document end.
 //
 // It does not rebuild the dictation request. It clicks the page's own dictation
 // controls and listens to the response of POST /backend-api/transcribe, whose
 // body is {"text": "...", "asset_pointer": "...", "asset_format": "webm"}.
 // The page keeps doing the recording, the encoding and the upload itself.
+//
+// Every state change is confirmed against the DOM before it is reported, so the
+// app never sits in a state the page is not actually in.
 
 (() => {
   if (window.__zrInstalled) return;
@@ -28,24 +31,25 @@
             const data = await res.clone().json();
             send('transcript', (data && data.text) || '');
           } catch (e) {
-            send('error', 'unreadable response: ' + e);
+            send('error', 'Unreadable response from ChatGPT.');
           }
         })
-        .catch((e) => send('error', 'request failed: ' + e));
+        .catch(() => send('error', 'The transcription request failed.'));
     }
     return promise;
   };
 
-  // --- controls -------------------------------------------------------------
+  // --- helpers --------------------------------------------------------------
 
   const button = (label) =>
     [...document.querySelectorAll('button')].find(
       (b) => (b.getAttribute('aria-label') || '') === label
     );
 
-  // The composer is a ProseMirror contenteditable. Emptying it stops the
-  // dictated text from lingering in the page, and stops any auto-submit from
-  // having anything to send.
+  // ChatGPT shows a red banner when the browser refused the microphone.
+  const micBlocked = () =>
+    /enable mic access/i.test(document.body ? document.body.innerText : '');
+
   const clearComposer = () => {
     const box = document.querySelector('#prompt-textarea, div[contenteditable="true"]');
     if (!box) return;
@@ -53,19 +57,54 @@
     box.dispatchEvent(new InputEvent('input', { bubbles: true }));
   };
 
+  // Waits for a condition, then resolves true, or false on timeout.
+  const waitFor = (test, timeout) =>
+    new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () => {
+        if (test()) return resolve(true);
+        if (Date.now() - started > timeout) return resolve(false);
+        setTimeout(tick, 100);
+      };
+      tick();
+    });
+
+  // --- controls -------------------------------------------------------------
+
   window.__zrReady = () => !!button('Start dictation');
 
   window.__zrStart = () => {
+    if (micBlocked()) {
+      send('mic-blocked', '');
+      return 'mic-blocked';
+    }
     const b = button('Start dictation');
-    if (!b) return 'not-ready';
+    if (!b) {
+      send('start-failed', 'The dictation button is not on the page.');
+      return 'no-button';
+    }
     clearComposer();
     b.click();
-    return 'recording';
+
+    // Confirm the page really entered dictation mode.
+    waitFor(() => !!button('Submit dictation'), 2500).then((ok) => {
+      if (ok) {
+        send('recording', '');
+      } else if (micBlocked()) {
+        send('mic-blocked', '');
+      } else {
+        send('start-failed', 'ChatGPT did not enter dictation mode.');
+      }
+    });
+    return 'starting';
   };
 
   window.__zrStop = () => {
     const b = button('Submit dictation');
-    if (!b) return 'not-recording';
+    if (!b) {
+      send('start-failed', 'Dictation was not running.');
+      return 'not-recording';
+    }
     b.click();
     return 'transcribing';
   };
@@ -82,12 +121,13 @@
     return 'clean';
   };
 
-  // Tell the app once the composer exists, so it knows the session is live.
+  // --- readiness ------------------------------------------------------------
+
   const poll = setInterval(() => {
     if (window.__zrReady()) {
       clearInterval(poll);
       send('ready', location.href);
     }
-  }, 500);
-  setTimeout(() => clearInterval(poll), 60000);
+  }, 400);
+  setTimeout(() => clearInterval(poll), 120000);
 })();

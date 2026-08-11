@@ -3,21 +3,34 @@ import WebKit
 
 /// Holds a hidden chatgpt.com page, keeps its session alive, and drives its
 /// dictation controls. The transcript comes back through the JS bridge.
+///
+/// No state is entered on hope. `.starting` only becomes `.recording` once the
+/// page confirms it really is dictating, and every state carries a watchdog, so
+/// the pill can never be left hanging on `Listening…`.
 final class DictationEngine: NSObject {
 
-    enum State { case idle, recording, transcribing }
+    enum State { case idle, starting, recording, transcribing }
+
+    enum Failure {
+        case micBlocked
+        case notSignedIn
+        case other(String)
+    }
 
     private(set) var state: State = .idle
     private(set) var isReady = false
 
     var onStateChange: ((State) -> Void)?
     var onTranscript: ((String) -> Void)?
-    var onError: ((String) -> Void)?
+    var onFailure: ((Failure) -> Void)?
     var onReady: (() -> Void)?
 
     private(set) var webView: WKWebView!
     private var loginWindow: NSWindow?
     private var watchdog: Timer?
+
+    /// Longest a single dictation may run before it is submitted on its own.
+    private let maxRecordingSeconds: TimeInterval = 180
 
     override init() {
         super.init()
@@ -29,8 +42,6 @@ final class DictationEngine: NSObject {
 
     private func buildWebView() {
         let config = WKWebViewConfiguration()
-
-        // A named data store makes the ChatGPT session survive relaunches.
         config.websiteDataStore = .default()
         config.mediaTypesRequiringUserActionForPlayback = []
 
@@ -56,7 +67,6 @@ final class DictationEngine: NSObject {
            let s = try? String(contentsOf: url, encoding: .utf8) {
             return s
         }
-        // Running the raw SPM binary during development.
         let dev = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .appendingPathComponent("Resources/bridge.js")
@@ -65,6 +75,8 @@ final class DictationEngine: NSObject {
 
     func load() {
         isReady = false
+        stopWatchdog()
+        set(.idle)
         webView.load(URLRequest(url: URL(string: "https://chatgpt.com/?temporary-chat=true")!))
     }
 
@@ -73,55 +85,56 @@ final class DictationEngine: NSObject {
     /// One Fn press advances the state machine.
     func toggle() {
         switch state {
-        case .idle:        start()
-        case .recording:   stop()
-        case .transcribing: break   // already working, ignore
+        case .idle:                   start()
+        case .starting, .recording:   stop()
+        case .transcribing:           break   // already working, ignore
         }
     }
 
     func start() {
         guard state == .idle else { return }
         guard isReady else {
-            onError?("ChatGPT session not ready. Open the login window from the menu bar.")
+            onFailure?(.notSignedIn)
             return
         }
-        set(.recording)
-        webView.evaluateJavaScript("window.__zrStart()") { [weak self] result, _ in
-            guard let self else { return }
-            if (result as? String) != "recording" {
-                self.set(.idle)
-                self.onError?("Could not start dictation (\(result as? String ?? "no response")).")
-            }
+
+        set(.starting)
+        // If the page never confirms, come back to idle rather than hang.
+        arm(seconds: 4) { [weak self] in
+            guard let self, self.state == .starting else { return }
+            self.set(.idle)
+            self.onFailure?(.other("ChatGPT did not start dictating."))
         }
+        webView.evaluateJavaScript("window.__zrStart()")
     }
 
     func stop() {
-        guard state == .recording else { return }
+        guard state == .starting || state == .recording else { return }
         set(.transcribing)
+        arm(seconds: 30) { [weak self] in
+            guard let self, self.state == .transcribing else { return }
+            self.set(.idle)
+            self.onFailure?(.other("Transcription timed out."))
+        }
         webView.evaluateJavaScript("window.__zrStop()") { [weak self] result, _ in
             guard let self else { return }
-            if (result as? String) != "transcribing" {
+            if (result as? String) == "not-recording" {
+                self.stopWatchdog()
                 self.set(.idle)
-                self.onError?("Could not submit dictation (\(result as? String ?? "no response")).")
-                return
-            }
-            // Never hang forever if the response never comes back.
-            self.watchdog?.invalidate()
-            self.watchdog = Timer.scheduledTimer(withTimeInterval: 25, repeats: false) { _ in
-                guard self.state == .transcribing else { return }
-                self.set(.idle)
-                self.onError?("Transcription timed out.")
             }
         }
     }
 
+    /// Escape hatch. Throws the dictation away and returns to rest.
     func cancel() {
+        guard state != .idle else { return }
         webView.evaluateJavaScript("window.__zrCancel()")
-        watchdog?.invalidate()
+        stopWatchdog()
         set(.idle)
     }
 
-    /// Shows the real page so the user can log in once.
+    // MARK: - Login window
+
     func showLoginWindow() {
         if loginWindow == nil {
             let w = NSWindow(
@@ -129,20 +142,22 @@ final class DictationEngine: NSObject {
                 styleMask: [.titled, .closable, .resizable, .miniaturizable],
                 backing: .buffered, defer: false
             )
-            w.title = "Sign in to ChatGPT"
+            w.title = "ChatGPT"
             w.center()
             w.isReleasedWhenClosed = false
+            w.delegate = self
             loginWindow = w
         }
+        webView.removeFromSuperview()
         loginWindow?.contentView = webView
         loginWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Puts the web view back out of sight once login is done.
     func hideLoginWindow() {
         loginWindow?.orderOut(nil)
         loginWindow?.contentView = NSView()
+        webView.removeFromSuperview()
         offscreenHost.addSubview(webView)
     }
 
@@ -164,9 +179,22 @@ final class DictationEngine: NSObject {
 
     func warmUp() { _ = offscreenHost }
 
+    // MARK: - Internals
+
     private func set(_ s: State) {
+        guard state != s else { return }
         state = s
         onStateChange?(s)
+    }
+
+    private func arm(seconds: TimeInterval, _ block: @escaping () -> Void) {
+        stopWatchdog()
+        watchdog = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { _ in block() }
+    }
+
+    private func stopWatchdog() {
+        watchdog?.invalidate()
+        watchdog = nil
     }
 }
 
@@ -176,23 +204,42 @@ extension DictationEngine: WKScriptMessageHandler {
     func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any],
               let type = body["type"] as? String else { return }
+        let payload = (body["payload"] as? String) ?? ""
 
         switch type {
         case "ready":
             isReady = true
             onReady?()
 
+        case "recording":
+            // The page confirmed it is really dictating.
+            guard state == .starting else { return }
+            set(.recording)
+            arm(seconds: maxRecordingSeconds) { [weak self] in
+                guard let self, self.state == .recording else { return }
+                self.stop()
+            }
+
+        case "mic-blocked":
+            stopWatchdog()
+            set(.idle)
+            onFailure?(.micBlocked)
+
+        case "start-failed":
+            stopWatchdog()
+            set(.idle)
+            onFailure?(.other(payload))
+
         case "transcript":
-            watchdog?.invalidate()
-            let text = (body["payload"] as? String) ?? ""
+            stopWatchdog()
             webView.evaluateJavaScript("window.__zrCleanup()")
             set(.idle)
-            onTranscript?(text)
+            onTranscript?(payload)
 
         case "error":
-            watchdog?.invalidate()
+            stopWatchdog()
             set(.idle)
-            onError?((body["payload"] as? String) ?? "unknown error")
+            onFailure?(.other(payload))
 
         default:
             break
@@ -204,8 +251,8 @@ extension DictationEngine: WKScriptMessageHandler {
 
 extension DictationEngine: WKUIDelegate, WKNavigationDelegate {
 
-    /// Grants the microphone to the page without a second prompt. macOS still
-    /// asks the user once, for the app itself.
+    /// Hands the microphone to the page. macOS still gates this on the app's own
+    /// microphone grant, which is requested at launch.
     func webView(_ webView: WKWebView,
                  requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                  initiatedByFrame frame: WKFrameInfo,
@@ -214,11 +261,21 @@ extension DictationEngine: WKUIDelegate, WKNavigationDelegate {
         decisionHandler(type == .microphone ? .grant : .deny)
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // bridge.js reports readiness on its own once the composer exists.
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        onFailure?(.other("Page failed to load."))
     }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        onError?("Page failed to load: \(error.localizedDescription)")
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        onFailure?(.other("No connection to ChatGPT."))
+    }
+}
+
+// MARK: - Login window lifecycle
+
+extension DictationEngine: NSWindowDelegate {
+    /// Closing the window must not destroy the web view, it only hides it.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        hideLoginWindow()
+        return false
     }
 }
