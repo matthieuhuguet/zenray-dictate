@@ -27,6 +27,16 @@ final class FnKeyMonitor {
     func start() -> Bool {
         stop()
 
+        // This guard is the whole point of the method.
+        //
+        // A listen-only session tap is created successfully even when the
+        // process is not trusted for Accessibility, but macOS then delivers
+        // only the events aimed at this app. The key appears to work while the
+        // app is frontmost and to be ignored everywhere else, which reads as a
+        // focus bug and is in fact a missing permission. Refusing to start
+        // without the right is what makes the app ask for it.
+        guard AXIsProcessTrusted() else { return false }
+
         let mask = (1 << CGEventType.flagsChanged.rawValue)
 
         let callback: CGEventTapCallBack = { _, type, event, refcon in

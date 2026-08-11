@@ -47,16 +47,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Without this right the key only reaches the app while it is
+        // frontmost, so there is no point pretending it works.
         Permissions.requestAccessibility()
-        pill.fail("Accessibility needed for the Fn key",
-                  hint: "Allow ZenRayDictate in System Settings > Privacy > Accessibility")
+        Permissions.openAccessibilitySettings()
+        pill.fail("Fn needs Accessibility to work outside this app",
+                  hint: "Tick ZenRayDictate in System Settings > Privacy > Accessibility")
 
         Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             guard self.fnKey.start() else { return }
             timer.invalidate()
             self.installEscape()
-            self.pill.flash("Fn is ready")
+            self.rebuildMenu()
+            self.pill.flash("Fn works everywhere now")
         }
     }
 

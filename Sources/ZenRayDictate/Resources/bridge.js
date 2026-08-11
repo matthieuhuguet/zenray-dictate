@@ -138,6 +138,8 @@
   // width boxes, and the page background is made see through. Leaving compact
   // mode is done by reloading, which is far cheaper than restoring by hand.
 
+  const PAD = 14;   // margin kept around the pill so its shadow has room
+
   window.__zrCompact = () => {
     const anchor =
       document.querySelector('#prompt-textarea') ||
@@ -179,23 +181,29 @@
       style.textContent = `
         html, body {
           background: transparent !important;
-          margin: 0 !important; padding: 0 !important;
-          overflow: hidden !important; height: auto !important;
+          margin: 0 !important;
+          overflow: hidden !important;
+          height: auto !important;
         }
+        /* Breathing room so the pill's own shadow is not clipped by the window. */
+        body { padding: ${PAD}px !important; box-sizing: border-box !important; }
         ::-webkit-scrollbar { display: none !important; }
-        [data-testid="composer-footer-actions"] { display: none !important; }
       `;
       document.head.appendChild(style);
     }
 
-    // Layout settles a frame or two later, so measure after it has.
-    setTimeout(() => {
+    // Layout settles a frame or two later, so measure after it has, and again
+    // shortly after in case fonts or the waveform change the height.
+    const report = () => {
       const r = target.getBoundingClientRect();
+      if (r.height < 20) return;
       send('compact', JSON.stringify({
-        width: Math.ceil(r.width),
-        height: Math.ceil(r.height)
+        width: Math.ceil(r.width) + PAD * 2,
+        height: Math.ceil(r.height) + PAD * 2
       }));
-    }, 250);
+    };
+    setTimeout(report, 250);
+    setTimeout(report, 1200);
 
     return 'compacted';
   };
