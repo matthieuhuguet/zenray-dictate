@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         engine.warmUp()
+        pill.prewarm()
         buildStatusItem()
         wireEngine()
         askForEverything()
@@ -30,7 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startHotKey() {
-        fnKey.onPress = { [weak self] in self?.engine.toggle() }
+        fnKey.onPress = { [weak self] in
+            guard let self else { return }
+            // The pill answers the key press itself, before any round trip to
+            // the page, so Fn always produces something on screen at once.
+            if self.engine.state == .idle { self.pill.show(state: .starting) }
+            self.engine.toggle()
+        }
 
         if fnKey.start() {
             installEscape()

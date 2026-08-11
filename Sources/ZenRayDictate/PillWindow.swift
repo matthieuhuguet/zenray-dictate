@@ -10,6 +10,13 @@ final class PillWindow {
 
     // MARK: - Public
 
+    /// Builds the panel ahead of time. Laying out an NSHostingView costs a
+    /// visible fraction of a second the first time, which is exactly the delay
+    /// you notice between pressing Fn and seeing the pill.
+    func prewarm() {
+        if panel == nil { build() }
+    }
+
     func show(state: DictationEngine.State) {
         model.error = nil
         model.state = state
