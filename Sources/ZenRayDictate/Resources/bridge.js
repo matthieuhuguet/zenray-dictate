@@ -109,14 +109,32 @@
       document.head.appendChild(style);
     }
 
+    // Resizing the macOS window changes the viewport width WKWebView renders
+    // at, which can reflow this very element, which re-fires the observer
+    // below, which resizes the window again: a feedback loop that redrew the
+    // UI on every tick. Two guards break it. A report is dropped if it does
+    // not differ from the last one SENT by more than a couple of pixels, so
+    // rounding noise from the resize round trip cannot re-trigger anything.
+    // And bursts of observer callbacks (several per animation frame while
+    // text reflows) are coalesced to one report per 120ms.
+    let lastSent = { width: 0, height: 0 };
+    let debounceTimer = null;
+
     const report = () => {
       const r = target.getBoundingClientRect();
       if (r.height < 20) return;
-      send('compact', JSON.stringify({
-        width: Math.ceil(r.width) + PAD * 2,
-        height: Math.ceil(r.height) + PAD * 2
-      }));
+      const width = Math.ceil(r.width) + PAD * 2;
+      const height = Math.ceil(r.height) + PAD * 2;
+      if (Math.abs(width - lastSent.width) < 3 && Math.abs(height - lastSent.height) < 3) return;
+      lastSent = { width, height };
+      send('compact', JSON.stringify({ width, height }));
     };
+
+    const reportDebounced = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(report, 120);
+    };
+
     setTimeout(report, 200);
     setTimeout(report, 1000);
 
@@ -124,9 +142,10 @@
     // two timed reports above only ever caught the bar's size at load time,
     // so the macOS window stayed frozen at its first, one line height and
     // clipped everything typed after that. Watching the box itself keeps the
-    // window matched to the content for as long as dictation runs.
+    // window matched to the content for as long as dictation runs, now
+    // debounced and threshold-gated so it settles instead of oscillating.
     if (!window.__zrResizeObserver) {
-      window.__zrResizeObserver = new ResizeObserver(report);
+      window.__zrResizeObserver = new ResizeObserver(reportDebounced);
       window.__zrResizeObserver.observe(target);
     }
 

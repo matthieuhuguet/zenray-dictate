@@ -186,7 +186,14 @@ extension ChatWindow: WKScriptMessageHandler {
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let w = json["width"] as? Double,
                   let h = json["height"] as? Double else { return }
-            compactSize = CGSize(width: min(w, 900), height: h)
+            let next = CGSize(width: min(w, 900), height: h)
+            // A second, independent guard against the resize feedback loop:
+            // even with the JS side debounced, a change this small is Retina
+            // point/pixel rounding noise, not new content, and re-applying it
+            // is exactly what could set the loop off again.
+            guard abs(next.width - compactSize.width) > 1.5
+               || abs(next.height - compactSize.height) > 1.5 else { return }
+            compactSize = next
             window.setContentSize(compactSize)
             position()
 
