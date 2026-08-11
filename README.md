@@ -13,16 +13,21 @@ than the local models used by some other dictation apps, especially in
 French and Japanese — available system-wide with one key, without paying for
 a separate transcription API.
 
-A caveat on that claim, so this doesn't read as more authoritative than it
-is: I haven't found an independent benchmark of ChatGPT's own dictation
-model to point to (it isn't listed on the couple of speech-to-text
-leaderboards I checked). This is my own day-to-day experience, not a ranked
-result. In my use, local models like Parakeet frequently mis-detect French
-speech and fall back to English mid-sentence, and don't handle Japanese at
-all, whereas ChatGPT's dictation does both. I've used it on both a ChatGPT
-Plus account and a free account and haven't noticed a quality difference. It
-can be a couple of seconds slower to come back than a local model, which is
-a trade I'll take for fewer wrong words.
+**Verdict after daily use, August 2026.** I've dictated with it every day since
+GPT-5.6 shipped and hit very few errors, in French and in Japanese alike.
+Parakeet keeps flipping to English mid-sentence, which makes it unusable for me.
+Whisper v3 large is both slower *and* wrong more often. Taken together —
+accuracy, latency, and the languages I actually work in — this is the best
+tradeoff I've found. I've used it on a ChatGPT Plus account and on a free one
+without noticing a quality difference.
+
+Two things I can't claim, and won't. **Which model powers it:** OpenAI doesn't
+publish that, and it isn't listed on the speech-to-text leaderboards I checked,
+so nothing here is a leaderboard rank — it's measured daily use. What I *did*
+measure is the plumbing: dictation uploads a WebM file to
+`/backend-api/transcribe` and opens no WebSocket and no WebRTC connection, so
+whatever transcribes it server-side, the request does not travel the Realtime
+API path.
 
 ## How it works
 
