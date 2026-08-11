@@ -6,13 +6,16 @@
 #
 # Output goes to out/ , kept separate from the sources so the working folder
 # stays readable and the finished files are trivial to grab, upload or drag:
-#   out/<name>.png     1080x1350
-#   out/<name>@2x.png  2160x2700
+#   out/<name>.png   2160x2700  (4:5)
 #
-# The 2x pass uses --force-device-scale-factor=2, which re-renders the page at
-# double resolution rather than upscaling the 1x bitmap — text and vector edges
-# stay genuinely sharp. Blowing up a small PNG instead is exactly how the first
-# attempt at this flyer ended up an unusable blur.
+# ONE file per slide, not two. A 1x export next to a 2x one is pure duplication:
+# the 2x carries strictly more detail, and anything that needs 1080x1350 can be
+# downscaled in a second, whereas the reverse is impossible.
+#
+# --force-device-scale-factor=2 re-renders the page at double resolution rather
+# than upscaling a 1x bitmap, so text and vector edges stay genuinely sharp.
+# Blowing up a small PNG instead is exactly how the first attempt at this flyer
+# ended up an unusable blur.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -42,12 +45,8 @@ for html in "${targets[@]}"; do
     base="${html%.html}"
 
     "$CHROME" --headless=new --disable-gpu --hide-scrollbars \
-        --window-size=$W,$H --screenshot="out/$base.png" \
-        "file://$(pwd)/$html" >/dev/null 2>&1
-
-    "$CHROME" --headless=new --disable-gpu --hide-scrollbars \
         --force-device-scale-factor=2 \
-        --window-size=$W,$H --screenshot="out/$base@2x.png" \
+        --window-size=$W,$H --screenshot="out/$base.png" \
         "file://$(pwd)/$html" >/dev/null 2>&1
 
     # Assert the format really is 4:5. A silent wrong-size export is worse than
@@ -57,7 +56,7 @@ import sys
 from PIL import Image
 base, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 ok = True
-for path, ew, eh in ((f"out/{base}.png", w, h), (f"out/{base}@2x.png", w*2, h*2)):
+for path, ew, eh in ((f"out/{base}.png", w*2, h*2),):
     got = Image.open(path).size
     flag = "ok" if got == (ew, eh) else f"WRONG, expected {ew}x{eh}"
     if got != (ew, eh): ok = False
@@ -67,4 +66,4 @@ PY
 done
 
 echo
-echo "Done. Files in out/ — 1x = ${W}x${H}, 2x = $((W*2))x$((H*2)), both 4:5."
+echo "Done. Files in out/ — $((W*2))x$((H*2)), 4:5."
