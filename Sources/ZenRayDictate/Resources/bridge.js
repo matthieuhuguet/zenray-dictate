@@ -130,6 +130,76 @@
     return 'clean';
   };
 
+  // --- compact mode ---------------------------------------------------------
+  //
+  // Strips the page down to the composer alone, so the app can float the real
+  // ChatGPT bar instead of imitating it. Everything that is not an ancestor of
+  // the composer is hidden, the ancestors are flattened to transparent full
+  // width boxes, and the page background is made see through. Leaving compact
+  // mode is done by reloading, which is far cheaper than restoring by hand.
+
+  window.__zrCompact = () => {
+    const anchor =
+      document.querySelector('#prompt-textarea') ||
+      document.querySelector('div[contenteditable="true"]');
+    if (!anchor) return 'no-composer';
+
+    const target = anchor.closest('form') || anchor.parentElement;
+
+    const chain = [];
+    for (let n = target; n && n !== document.documentElement; n = n.parentElement) {
+      chain.push(n);
+    }
+    const inChain = new Set(chain);
+
+    chain.forEach((n) => {
+      const parent = n.parentElement;
+      if (parent) {
+        [...parent.children].forEach((sib) => {
+          if (!inChain.has(sib)) sib.style.display = 'none';
+        });
+      }
+      n.style.setProperty('position', 'static', 'important');
+      n.style.setProperty('margin', '0', 'important');
+      n.style.setProperty('padding', '0', 'important');
+      n.style.setProperty('max-width', 'none', 'important');
+      n.style.setProperty('width', '100%', 'important');
+      n.style.setProperty('height', 'auto', 'important');
+      n.style.setProperty('min-height', '0', 'important');
+      n.style.setProperty('background', 'transparent', 'important');
+      n.style.setProperty('border', 'none', 'important');
+      n.style.setProperty('box-shadow', 'none', 'important');
+      n.style.setProperty('transform', 'none', 'important');
+      n.style.setProperty('inset', 'auto', 'important');
+    });
+
+    if (!document.getElementById('zr-compact-style')) {
+      const style = document.createElement('style');
+      style.id = 'zr-compact-style';
+      style.textContent = `
+        html, body {
+          background: transparent !important;
+          margin: 0 !important; padding: 0 !important;
+          overflow: hidden !important; height: auto !important;
+        }
+        ::-webkit-scrollbar { display: none !important; }
+        [data-testid="composer-footer-actions"] { display: none !important; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    // Layout settles a frame or two later, so measure after it has.
+    setTimeout(() => {
+      const r = target.getBoundingClientRect();
+      send('compact', JSON.stringify({
+        width: Math.ceil(r.width),
+        height: Math.ceil(r.height)
+      }));
+    }, 250);
+
+    return 'compacted';
+  };
+
   /// Everything worth knowing when a refusal has to be diagnosed.
   window.__zrDiagnose = () =>
     JSON.stringify({

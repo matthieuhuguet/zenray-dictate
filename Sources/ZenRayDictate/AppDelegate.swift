@@ -3,7 +3,8 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let engine = DictationEngine()
-    private let pill = PillWindow()
+    private let composer = ComposerWindow()   // the real ChatGPT bar
+    private let pill = PillWindow()           // only for failures and notices
     private let fnKey = FnKeyMonitor()
     private var statusItem: NSStatusItem!
     private var escapeMonitor: Any?
@@ -33,9 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startHotKey() {
         fnKey.onPress = { [weak self] in
             guard let self else { return }
-            // The pill answers the key press itself, before any round trip to
-            // the page, so Fn always produces something on screen at once.
-            if self.engine.state == .idle { self.pill.show(state: .starting) }
+            // The bar comes up on the key press itself, before any round trip
+            // to the page, so Fn always produces something on screen at once.
+            if self.engine.state == .idle, self.engine.isReady {
+                self.composer.show(self.engine.webView)
+            }
             self.engine.toggle()
         }
 
@@ -137,10 +140,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.setIcon(for: state)
             switch state {
-            case .starting, .recording: self.pill.show(state: state)
-            case .transcribing:         self.pill.update(state: state)
-            case .idle:                 self.pill.update(state: .idle)
+            case .starting, .recording, .transcribing:
+                self.pill.hide()
+                self.composer.show(self.engine.webView)
+            case .idle:
+                self.composer.hide()
+                self.engine.parkWebView()
             }
+        }
+
+        engine.onCompactSize = { [weak self] size in
+            self?.composer.resize(to: size)
         }
 
         engine.onTranscript = { [weak self] text in

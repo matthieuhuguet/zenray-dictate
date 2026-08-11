@@ -24,6 +24,11 @@ final class DictationEngine: NSObject {
     var onTranscript: ((String) -> Void)?
     var onFailure: ((Failure) -> Void)?
     var onReady: (() -> Void)?
+    var onCompactSize: ((CGSize) -> Void)?
+
+    /// Whether the page should be stripped down to its composer. False only
+    /// while the full ChatGPT window is open for signing in.
+    private var wantsCompact = true
 
     private(set) var webView: WKWebView!
     private var loginWindow: NSWindow?
@@ -138,6 +143,12 @@ final class DictationEngine: NSObject {
     // MARK: - Login window
 
     func showLoginWindow() {
+        // Signing in needs the whole page back, not the composer alone.
+        if wantsCompact {
+            wantsCompact = false
+            webView.setValue(true, forKey: "drawsBackground")
+            load()
+        }
         if loginWindow == nil {
             let w = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800),
@@ -159,9 +170,19 @@ final class DictationEngine: NSObject {
     func hideLoginWindow() {
         loginWindow?.orderOut(nil)
         loginWindow?.contentView = NSView()
+        if !wantsCompact {
+            wantsCompact = true
+            load()          // comes back compacted once ready
+        }
+        parkWebView()
+    }
+
+    /// Puts the web view back in its one point window, where the page stays
+    /// awake between dictations.
+    func parkWebView() {
         webView.removeFromSuperview()
-        // Keep a desktop sized frame so ChatGPT renders its wide layout, with
-        // the dictation controls the bridge looks for.
+        // A desktop sized frame keeps ChatGPT in its wide layout, which is the
+        // one carrying the dictation controls the bridge looks for.
         webView.frame = NSRect(x: 0, y: 0, width: 1100, height: 800)
         webView.autoresizingMask = []
         stealthHost.addSubview(webView)
@@ -246,7 +267,15 @@ extension DictationEngine: WKScriptMessageHandler {
         switch type {
         case "ready":
             isReady = true
+            if wantsCompact { webView.evaluateJavaScript("window.__zrCompact()") }
             onReady?()
+
+        case "compact":
+            guard let data = payload.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let w = json["width"] as? Double,
+                  let h = json["height"] as? Double else { return }
+            onCompactSize?(CGSize(width: w, height: h))
 
         case "recording":
             // The page confirmed it is really dictating.
