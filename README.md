@@ -1,73 +1,132 @@
 # ZenRay Dictate
 
-Fn fait apparaître ou disparaître une fenêtre ChatGPT. C'est tout ce que l'app
-fait. La dictée elle-même, c'est la vraie page ChatGPT qui la gère : tu cliques
-sur `Start Dictation`, tu parles, tu cliques sur `Stop Dictation`, et le texte
-part automatiquement dans le presse-papier.
+A tiny macOS menu bar app: **Fn** shows or hides a small ChatGPT window,
+**Cmd+D** starts and stops dictation. When you stop, the transcript is
+already on your clipboard. That's the whole app.
 
-## Pourquoi si simple
+![ZenRay Dictate mid-dictation](docs/screenshot.png)
 
-Trois versions plus construites ont montré que reconstruire l'interface de
-ChatGPT en SwiftUI, deviner ses libellés de boutons, ou distinguer les états
-d'enregistrement, ajoutait de la fragilité sans rien apporter. La page fait
-déjà tout ça correctement. L'app n'a qu'un rôle : la garder en fond, connectée,
-et attraper le texte qui en sort.
+## Why
 
-## Comment ça marche
+I wanted ChatGPT's voice dictation — which I find noticeably more reliable
+than the local models used by some other dictation apps, especially in
+French and Japanese — available system-wide with one key, without paying for
+a separate transcription API.
 
-L'app embarque une page chatgpt.com dans une fenêtre normale. Elle ne
-reconstruit pas la requête de transcription : elle **regarde passer la
-réponse** de `POST /backend-api/transcribe`, dont le corps est
-`{"text": …, "asset_format": "webm"}`, et copie ce texte dans le presse-papier.
-Rien d'autre n'est injecté ni cliqué à sa place.
+A caveat on that claim, so this doesn't read as more authoritative than it
+is: I haven't found an independent benchmark of ChatGPT's own dictation
+model to point to (it isn't listed on the couple of speech-to-text
+leaderboards I checked). This is my own day-to-day experience, not a ranked
+result. In my use, local models like Parakeet frequently mis-detect French
+speech and fall back to English mid-sentence, and don't handle Japanese at
+all, whereas ChatGPT's dictation does both. I've used it on both a ChatGPT
+Plus account and a free account and haven't noticed a quality difference. It
+can be a couple of seconds slower to come back than a local model, which is
+a trade I'll take for fewer wrong words.
 
-## Construire
+## How it works
+
+The app keeps a hidden `chatgpt.com` session alive in a `WKWebView`. It does
+not reimplement ChatGPT's transcription request. It:
+
+1. Shows the page's own composer bar, trimmed down to just that bar (no
+   sidebar, no chat history) — the black pill in the screenshot above is the
+   real ChatGPT UI, not a custom recreation of it.
+2. On Cmd+D, clicks whichever of ChatGPT's own `Start Dictation` /
+   `Stop Dictation` buttons is currently showing (matched by an
+   accessibility-label pattern, not a hardcoded string — those labels have
+   changed between ChatGPT builds during development).
+3. Watches the response of `POST /backend-api/transcribe`
+   (`{"text": ..., "asset_format": "webm"}`) and copies the text to the
+   clipboard.
+
+No keystrokes are simulated into the page, no request is rebuilt by hand.
+
+## A note on Terms of Service
+
+This automates a real, logged-in ChatGPT web session rather than going
+through OpenAI's official API, which is outside what OpenAI's Terms of
+Service cover for automated access. It only ever touches your own account —
+there's no bypassing payment, no scraping anyone else's data — but the risk
+of a flag or restriction on your account is real and it's yours to carry if
+you use this. I'm saying this plainly rather than dressing it up, so you can
+decide with the same information I had.
+
+## Setup
+
+Requires macOS 14+ and a ChatGPT account (Plus or free).
 
 ```bash
+git clone https://github.com/matthieuhuguet/zenray-dictate.git
+cd zenray-dictate
+./make-certificate.sh   # once: a local code-signing identity
 ./build.sh
 open ZenRayDictate.app
 ```
 
-## Premier lancement
+**Why the certificate script.** An ad-hoc signature changes on every build,
+and macOS ties the Accessibility permission to that exact signature — so
+without a stable identity, Accessibility silently revokes itself on every
+rebuild even though the tick in System Settings never changes. Not needed
+again after the first run; `build.sh` reuses the same identity from then on.
 
-**1.** La fenêtre s'ouvre toute seule. Connecte-toi normalement à ChatGPT. La
-session persiste ensuite entre les lancements.
+**First run.**
 
-**2.** Accorde le micro à l'invite. Si Fn ne répond pas ailleurs que dans l'app,
-accorde aussi l'accessibilité (Réglages Système, Confidentialité,
-Accessibilité), et va dans Réglages Système, Clavier, « Appuyer sur la touche
-🌐 pour » et choisis « Ne rien faire », sinon macOS capte la touche avant l'app.
+1. The window opens on its own. Sign in to ChatGPT normally. The session
+   persists across future launches.
+2. Grant the microphone when asked. If Fn does nothing outside the app,
+   grant Accessibility too (System Settings → Privacy & Security →
+   Accessibility).
+3. System Settings → Keyboard → "Press 🌐 key to" → **Do Nothing**. Without
+   this, macOS intercepts Fn for its own emoji picker or dictation before the
+   app ever sees it.
 
-## Utilisation
+**Using it.** Cmd+D anywhere: the bar appears, dictation starts. Talk. Cmd+D
+again: it stops, and the text is on your clipboard — `Cmd+V` to paste. Fn
+shows or hides the window on its own, independent of dictation.
 
-Fn ouvre la fenêtre. `Start Dictation`, tu parles, `Stop Dictation`. Le texte
-est déjà dans le presse-papier, `Cmd+V` pour le coller. Fn de nouveau referme
-la fenêtre.
+## Known limitations, help wanted
 
-## Structure
+- **Fn doesn't reliably bring the window back once it's lost focus** — click
+  another app, and pressing Fn again sometimes does nothing; you have to
+  click the app's Dock icon instead. I'd genuinely like help tracking this
+  down — issues and PRs welcome.
+- Cmd+D is a system-wide shortcut while this app is running, so it stops
+  reaching Cmd+D in other apps (Safari's bookmark shortcut, Finder's
+  Duplicate) for as long as ZenRay Dictate is open.
+- Dictation opens in a temporary ChatGPT chat, so nothing is saved to your
+  ChatGPT history.
+- If ChatGPT changes its accessibility labels again, the button matching in
+  `bridge.js` may need a small update.
 
-| Fichier | Rôle |
+## Compared to
+
+| | Cost | Model |
+|---|---|---|
+| **ZenRay Dictate** | Free (uses your ChatGPT account) | ChatGPT's dictation, cloud |
+| [SuperWhisper](https://superwhisper.com) | Free tier + Pro ($8.49/mo or a one-time lifetime price) | Local + cloud models |
+| [Handy](https://github.com/cjpais/Handy) | Free, open source (MIT) | Fully offline, local models |
+
+Handy in particular is free and open source, contrary to what I first
+assumed when writing this — worth a look if you'd rather everything stay
+local and never touch a ChatGPT account.
+
+## Project layout
+
+| File | Role |
 |---|---|
-| `main.swift` | Démarrage, mode accessoire, aucun Dock |
-| `AppDelegate.swift` | Barre de menus, permissions, câblage de Fn |
-| `FnKeyMonitor.swift` | `CGEventTap` sur Fn, un déclenchement par appui |
-| `ChatWindow.swift` | La fenêtre ChatGPT, montrer/cacher, pont JS |
-| `Permissions.swift` | Micro et accessibilité |
-| `Log.swift` | Journal sur disque, `~/Library/Logs/ZenRayDictate.log` |
-| `Resources/bridge.js` | Écoute `/backend-api/transcribe`, rien d'autre |
+| `main.swift` | Entry point, regular app so it also gets a Dock icon |
+| `AppDelegate.swift` | Menu bar, permissions at launch, wires Cmd+D and Fn |
+| `ChatWindow.swift` | The window: compact composer bar, sign-in mode, JS bridge, clipboard |
+| `GlobalHotKey.swift` | Cmd+D via `RegisterEventHotKey` — no permission required |
+| `FnKeyMonitor.swift` | Fn via a listen-only `CGEventTap` — needs Accessibility |
+| `LoginItem.swift` | Launch at login, via `SMAppService` |
+| `Permissions.swift` | Microphone and Accessibility helpers |
+| `Log.swift` | Plain text log at `~/Library/Logs/ZenRayDictate.log` |
+| `Resources/bridge.js` | Everything that touches the ChatGPT page itself |
+| `Entitlements.plist` | Declares microphone access under the hardened runtime |
+| `make-certificate.sh` | One-time local signing identity, see Setup |
 
-## Le piège d'accessibilité à connaître
+## License
 
-Une signature ad-hoc change à chaque reconstruction. L'accessibilité est
-accordée contre cette signature, donc **elle se révoque toute seule à chaque
-build**, même si la case reste cochée dans les Réglages. C'est sans
-conséquence pour l'usage courant, Fn continue de fonctionner tant que l'app
-n'est pas reconstruite ; ça compte seulement pendant le développement.
-
-## Limites connues
-
-L'accès automatisé à ChatGPT contrevient aux conditions d'usage d'OpenAI.
-L'exposition porte sur le compte, décision prise en connaissance de cause.
-
-La dictée s'ouvre dans une conversation temporaire, rien ne se dépose dans
-l'historique ChatGPT.
+MIT. See [LICENSE](LICENSE).
