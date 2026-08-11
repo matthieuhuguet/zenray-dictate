@@ -14,13 +14,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !granted { Permissions.openMicrophoneSettings() }
         }
 
-        fnKey.onPress = { [weak self] in self?.chat.toggle() }
-        if !fnKey.start() {
+        fnKey.onPress = { [weak self] in
+            Log.write("Fn pressed")
+            self?.chat.toggle()
+        }
+        let fnStarted = fnKey.start()
+        Log.write("accessibility trusted: \(Permissions.accessibility), Fn tap started: \(fnStarted)")
+        if !fnStarted {
             Permissions.requestAccessibility()
             Permissions.openAccessibilitySettings()
             Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
                 guard let self else { timer.invalidate(); return }
-                if self.fnKey.start() { timer.invalidate() }
+                if self.fnKey.start() {
+                    timer.invalidate()
+                    Log.write("Fn tap started after granting accessibility")
+                }
             }
         }
     }

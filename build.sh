@@ -46,14 +46,24 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> Signing"
-# A stable ad-hoc identifier is what lets macOS remember the Accessibility and
-# microphone grants across rebuilds.
-#
+# An ad-hoc signature (--sign -) is derived from the binary's own hash, so it
+# changes at every build. TCC grants (Accessibility, Microphone) are tied to
+# the signature, so they were silently revoked on every rebuild even with the
+# tick left on in System Settings. A local certificate keeps the signature
+# stable across builds, so permissions granted once actually stay granted.
+# Run ./make-certificate.sh once if this identity does not exist yet.
+SIGN_ID="ZenRayDictate Local"
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
+    echo "    No '$SIGN_ID' certificate found, run ./make-certificate.sh once."
+    echo "    Falling back to an ad-hoc signature for now (permissions will not persist)."
+    SIGN_ID="-"
+fi
+
 # The entitlements are not optional: under the hardened runtime, an app without
 # com.apple.security.device.audio-input is denied the microphone before TCC is
 # consulted, so it never appears in System Settings > Privacy > Microphone at
 # all. That is the failure this file exists to prevent.
-codesign --force --deep --sign - \
+codesign --force --deep --sign "$SIGN_ID" \
     --identifier "$BUNDLE_ID" \
     --options runtime \
     --entitlements Entitlements.plist \
