@@ -80,8 +80,17 @@
       n.style.setProperty('background', 'transparent', 'important');
       n.style.setProperty('border', 'none', 'important');
       n.style.setProperty('box-shadow', 'none', 'important');
+      n.style.setProperty('filter', 'none', 'important');
+      n.style.setProperty('backdrop-filter', 'none', 'important');
       n.style.setProperty('transform', 'none', 'important');
       n.style.setProperty('inset', 'auto', 'important');
+      // Whatever painted the stray blurred shape below the pill (a
+      // pseudo-element glow, a filter, a decorative background) is either
+      // neutralized above or, if it comes from somewhere `style.setProperty`
+      // cannot reach such as a ::before, clipped here: overflow:hidden cuts
+      // any paint effect at this box's own edge regardless of what produced
+      // it, without touching the real, in-flow content inside.
+      n.style.setProperty('overflow', 'hidden', 'important');
     });
 
     if (!document.getElementById('zr-compact-style')) {
@@ -110,6 +119,17 @@
     };
     setTimeout(report, 200);
     setTimeout(report, 1000);
+
+    // A dictation that runs long turns the composer into several lines. The
+    // two timed reports above only ever caught the bar's size at load time,
+    // so the macOS window stayed frozen at its first, one line height and
+    // clipped everything typed after that. Watching the box itself keeps the
+    // window matched to the content for as long as dictation runs.
+    if (!window.__zrResizeObserver) {
+      window.__zrResizeObserver = new ResizeObserver(report);
+      window.__zrResizeObserver.observe(target);
+    }
+
     return true;
   };
 
