@@ -4,7 +4,10 @@
 #   ./render.sh            renders all slides
 #   ./render.sh slide-2    renders one
 #
-# Output: <name>.png (1080x1350) and <name>@2x.png (2160x2700).
+# Output goes to out/ , kept separate from the sources so the working folder
+# stays readable and the finished files are trivial to grab, upload or drag:
+#   out/<name>.png     1080x1350
+#   out/<name>@2x.png  2160x2700
 #
 # The 2x pass uses --force-device-scale-factor=2, which re-renders the page at
 # double resolution rather than upscaling the 1x bitmap — text and vector edges
@@ -25,6 +28,8 @@ if [[ -z "${CHROME:-}" || ! -x "$CHROME" ]]; then
     exit 1
 fi
 
+mkdir -p out
+
 targets=()
 if [[ $# -gt 0 ]]; then
     for a in "$@"; do targets+=("${a%.html}.html"); done
@@ -37,12 +42,12 @@ for html in "${targets[@]}"; do
     base="${html%.html}"
 
     "$CHROME" --headless=new --disable-gpu --hide-scrollbars \
-        --window-size=$W,$H --screenshot="$base.png" \
+        --window-size=$W,$H --screenshot="out/$base.png" \
         "file://$(pwd)/$html" >/dev/null 2>&1
 
     "$CHROME" --headless=new --disable-gpu --hide-scrollbars \
         --force-device-scale-factor=2 \
-        --window-size=$W,$H --screenshot="$base@2x.png" \
+        --window-size=$W,$H --screenshot="out/$base@2x.png" \
         "file://$(pwd)/$html" >/dev/null 2>&1
 
     # Assert the format really is 4:5. A silent wrong-size export is worse than
@@ -52,14 +57,14 @@ import sys
 from PIL import Image
 base, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 ok = True
-for path, ew, eh in ((f"{base}.png", w, h), (f"{base}@2x.png", w*2, h*2)):
+for path, ew, eh in ((f"out/{base}.png", w, h), (f"out/{base}@2x.png", w*2, h*2)):
     got = Image.open(path).size
     flag = "ok" if got == (ew, eh) else f"WRONG, expected {ew}x{eh}"
     if got != (ew, eh): ok = False
-    print(f"  {path:24s} {got[0]}x{got[1]}  {flag}")
+    print(f"  {path:28s} {got[0]}x{got[1]}  {flag}")
 sys.exit(0 if ok else 1)
 PY
 done
 
 echo
-echo "Done. 1x = ${W}x${H}, 2x = $((W*2))x$((H*2)), both 4:5."
+echo "Done. Files in out/ — 1x = ${W}x${H}, 2x = $((W*2))x$((H*2)), both 4:5."

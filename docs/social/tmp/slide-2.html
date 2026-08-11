@@ -2,114 +2,100 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Slide 2 — the problem</title>
+<title>Slide 2 — what I built and why</title>
 <link rel="stylesheet" href="_canvas.css">
 <style>
-  .eyebrow { color: var(--accent-gold); }
-  .headline { font-size: 72px; margin-top: 18px; }
+  .eyebrow  { color: var(--accent-ok); }
+  .headline { font-size: 74px; margin-top: 16px; }
 
-  .row {
+  .icon {
+    width: 96px; height: 96px;
+    border-radius: 22px;
+    display: block;
+    box-shadow: 0 6px 22px rgba(0,0,0,.12);
+  }
+
+  /* The real dictation bar, rounded, exactly as it appears on screen. */
+  .bar {
     width: 100%;
-    max-width: 880px;
-    display: flex;
-    align-items: flex-start;
-    gap: 22px;
+    border-radius: 26px;
+    overflow: hidden;
+    box-shadow: 0 4px 18px rgba(0,0,0,.08);
   }
-  .row + .row { margin-top: 34px; }
+  .bar img { width: 100%; display: block; }
 
-  .row .mark {
-    flex: none;
-    width: 46px; height: 46px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-family: 'AnthropicSans', sans-serif;
-    font-weight: 600;
-    font-size: 22px;
-    color: #fff;
-  }
-  .row.bad  .mark { background: var(--accent-warn); }
-  .row.good .mark { background: var(--accent-ok); }
-
-  .row p { font-size: 31px; line-height: 1.38; }
-
-  .verdict {
+  .why {
     width: 100%;
-    max-width: 880px;
-    background: #f6f9f7;
-    border: 1px solid #dfeae3;
-    border-radius: 18px;
-    padding: 30px 34px;
-  }
-  .verdict .label {
-    font-family: 'AnthropicSans', sans-serif;
-    font-weight: 600;
-    font-size: 19px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--accent-ok);
-  }
-  .verdict p {
+    max-width: 900px;
     font-family: 'AnthropicSans', sans-serif;
     font-weight: 500;
-    font-size: 26px;
+    font-size: 27px;
     line-height: 1.42;
     color: var(--ink);
-    margin-top: 12px;
-  }
-  .verdict p b { font-weight: 600; }
-
-  .note {
-    width: 100%;
-    max-width: 880px;
-    font-family: 'AnthropicSans', sans-serif;
-    font-weight: 500;
-    font-size: 20px;
-    line-height: 1.5;
-    color: var(--ink-faint);
     text-align: center;
   }
+  .why b { font-weight: 600; }
+
+  .grid {
+    width: 100%;
+    max-width: 900px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 26px;
+  }
+  .cell {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+  }
+  .cell .dot {
+    flex: none;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--accent-ok);
+    margin-top: 12px;
+  }
+  .cell p {
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 500;
+    font-size: 24px;
+    line-height: 1.34;
+    color: var(--ink);
+  }
+  .cell p b { font-weight: 600; }
 </style>
 </head>
 <body>
   <div class="canvas">
 
-    <div class="eyebrow">The problem</div>
-    <div class="headline">Local models<br>still stumble</div>
+    <div class="eyebrow">What I built</div>
+    <div class="headline">Dictation,<br>everywhere</div>
 
     <div class="spacer"></div>
 
-    <div class="row bad">
-      <div class="mark">✕</div>
-      <p class="body">In French, local Whisper- and Parakeet-style models frequently <b>mis-hear and fall back to English</b> mid-sentence.</p>
-    </div>
-
-    <div class="row bad">
-      <div class="mark">✕</div>
-      <p class="body">Japanese isn't supported at all by most of them.</p>
-    </div>
-
-    <div class="row good">
-      <div class="mark">✓</div>
-      <p class="body">ChatGPT's own dictation handles <b>both</b>, reliably, in daily use.</p>
-    </div>
+    <img class="icon" src="4-app-icon.png">
 
     <div class="spacer"></div>
 
-    <div class="verdict">
-      <div class="label">Verdict — August 2026</div>
-      <p>
-        Tested daily since GPT-5.6 shipped: <b>very few errors</b>, in French
-        and in Japanese. Parakeet keeps flipping to English mid-sentence.
-        Whisper v3 large is slower <i>and</i> still wrong more often.
-        <b>Best accuracy-to-latency tradeoff I've found.</b>
-      </p>
+    <div class="bar"><img src="3-waveform.png"></div>
+
+    <div class="spacer"></div>
+
+    <div class="why">
+      I dictate all day. The good tools are paid, and the free ones run local
+      models that break on the two languages I actually work in. So I wired
+      <b>ChatGPT's own dictation</b> to a keyboard shortcut, system-wide.
     </div>
 
     <div class="spacer"></div>
 
-    <div class="note">
-      OpenAI doesn't publish which model powers dictation — so this is measured
-      daily use, not a leaderboard rank.
+    <div class="grid">
+      <div class="cell"><div class="dot"></div><p><b>Any app</b>, not just a browser tab</p></div>
+      <div class="cell"><div class="dot"></div><p><b>Free</b>, on the account you already have</p></div>
+      <div class="cell"><div class="dot"></div><p>Clipboard <b>automatically</b>, no copy step</p></div>
+      <div class="cell"><div class="dot"></div><p>Runs in the background, <b>launches at login</b></p></div>
+      <div class="cell"><div class="dot"></div><p>French and Japanese, <b>reliably</b></p></div>
+      <div class="cell"><div class="dot"></div><p>No API key, <b>no per-minute cost</b></p></div>
     </div>
 
   </div>

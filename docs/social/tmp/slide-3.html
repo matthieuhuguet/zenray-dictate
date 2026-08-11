@@ -2,114 +2,115 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Slide 3 — the solution</title>
+<title>Slide 2 — the problem</title>
 <link rel="stylesheet" href="_canvas.css">
 <style>
-  .eyebrow { color: var(--accent-ok); }
-  .headline { font-size: 84px; margin-top: 18px; }
+  .eyebrow { color: var(--accent-gold); }
+  .headline { font-size: 72px; margin-top: 18px; }
 
-  .keys { display: flex; gap: 20px; align-items: center; }
-  .keys + .keys { margin-top: 14px; }
-  .key {
-    font-family: 'AnthropicSans', sans-serif;
-    font-weight: 600;
-    font-size: 29px;
-    color: var(--ink);
-    background: #f4f4f4;
-    border: 1px solid #e2e2e2;
-    border-radius: 14px;
-    padding: 13px 26px;
-    min-width: 108px;
-    text-align: center;
-  }
-  .keys .what {
-    font-family: 'AnthropicSans', sans-serif;
-    font-weight: 500;
-    font-size: 27px;
-    color: var(--ink-soft);
-  }
-
-  .list { width: 100%; max-width: 800px; }
-  .item {
-    display: flex;
-    align-items: flex-start;
-    gap: 18px;
-  }
-  .item + .item { margin-top: 24px; }
-  .item .dot {
-    flex: none;
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--accent-ok);
-    margin-top: 14px;
-  }
-  .item p { font-size: 30px; line-height: 1.38; }
-
-  .footer {
-    padding-top: 28px;
-    border-top: 1px solid var(--rule);
+  .row {
     width: 100%;
     max-width: 880px;
-    text-align: center;
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
   }
-  .footer .repo {
+  .row + .row { margin-top: 34px; }
+
+  .row .mark {
+    flex: none;
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
     font-family: 'AnthropicSans', sans-serif;
     font-weight: 600;
-    font-size: 28px;
-    color: var(--ink);
+    font-size: 22px;
+    color: #fff;
   }
-  .footer .sub {
-    margin-top: 8px;
+  .row.bad  .mark { background: var(--accent-warn); }
+  .row.good .mark { background: var(--accent-ok); }
+
+  .row p { font-size: 31px; line-height: 1.38; }
+
+  .verdict {
+    width: 100%;
+    max-width: 880px;
+    background: #f6f9f7;
+    border: 1px solid #dfeae3;
+    border-radius: 18px;
+    padding: 30px 34px;
+  }
+  .verdict .label {
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 600;
+    font-size: 19px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-ok);
+  }
+  .verdict p {
     font-family: 'AnthropicSans', sans-serif;
     font-weight: 500;
-    font-size: 21px;
+    font-size: 26px;
+    line-height: 1.42;
+    color: var(--ink);
+    margin-top: 12px;
+  }
+  .verdict p b { font-weight: 600; }
+
+  .note {
+    width: 100%;
+    max-width: 880px;
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 500;
+    font-size: 20px;
+    line-height: 1.5;
     color: var(--ink-faint);
+    text-align: center;
   }
 </style>
 </head>
 <body>
   <div class="canvas">
 
-    <div class="eyebrow">The solution</div>
-    <div class="headline">Two keys.<br>Free.</div>
+    <div class="eyebrow">The problem</div>
+    <div class="headline">Local models<br>still stumble</div>
 
     <div class="spacer"></div>
 
-    <div class="keys">
-      <div class="key">Fn</div>
-      <div class="what">show / hide</div>
-    </div>
-    <div class="keys">
-      <div class="key">⌘ D</div>
-      <div class="what">start / stop</div>
+    <div class="row bad">
+      <div class="mark">✕</div>
+      <p class="body">In French, local Whisper- and Parakeet-style models frequently <b>mis-hear and fall back to English</b> mid-sentence.</p>
     </div>
 
-    <div class="spacer"></div>
+    <div class="row bad">
+      <div class="mark">✕</div>
+      <p class="body">Japanese isn't supported at all by most of them.</p>
+    </div>
 
-    <div class="list">
-      <div class="item">
-        <div class="dot"></div>
-        <p class="body">Fn shows or hides a tiny ChatGPT window.</p>
-      </div>
-      <div class="item">
-        <div class="dot"></div>
-        <p class="body">Cmd+D starts and stops dictation on the real ChatGPT composer.</p>
-      </div>
-      <div class="item">
-        <div class="dot"></div>
-        <p class="body">The transcript lands on your <b>clipboard</b> automatically. Cmd+V, done.</p>
-      </div>
-      <div class="item">
-        <div class="dot"></div>
-        <p class="body"><b>Free</b> — it uses your own ChatGPT account, not a paid transcription API.</p>
-      </div>
+    <div class="row good">
+      <div class="mark">✓</div>
+      <p class="body">ChatGPT's own dictation handles <b>both</b>, reliably, in daily use.</p>
     </div>
 
     <div class="spacer"></div>
 
-    <div class="footer">
-      <div class="repo">github.com/matthieuhuguet/zenray-dictate</div>
-      <div class="sub">MIT licensed · open source · issues and PRs welcome</div>
+    <div class="verdict">
+      <div class="label">Verdict — August 2026</div>
+      <p>
+        Tested daily since GPT-5.6 shipped: <b>very few errors</b>, in French
+        and in Japanese. Parakeet keeps flipping to English mid-sentence.
+        Whisper v3 large is slower <i>and</i> still wrong more often.
+        <b>Best accuracy-to-latency tradeoff I've found.</b>
+      </p>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="note">
+      Almost certainly OpenAI's GPT Realtime audio stack, either the 4o
+      generation or the newer one. OpenAI doesn't confirm which, so treat this
+      as an informed guess and the rest as measured daily use.
     </div>
 
   </div>

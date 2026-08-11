@@ -21,13 +21,18 @@ accuracy, latency, and the languages I actually work in — this is the best
 tradeoff I've found. I've used it on a ChatGPT Plus account and on a free one
 without noticing a quality difference.
 
-Two things I can't claim, and won't. **Which model powers it:** OpenAI doesn't
-publish that, and it isn't listed on the speech-to-text leaderboards I checked,
-so nothing here is a leaderboard rank — it's measured daily use. What I *did*
-measure is the plumbing: dictation uploads a WebM file to
-`/backend-api/transcribe` and opens no WebSocket and no WebRTC connection, so
-whatever transcribes it server-side, the request does not travel the Realtime
-API path.
+**Which model powers it.** OpenAI doesn't say. It's almost certainly their GPT
+Realtime audio stack — either the 4o generation or the newer one — since this is
+OpenAI's own product and the quality jumped noticeably around the GPT-5.6
+release. Treat that as an informed guess rather than a documented fact: the model
+isn't named anywhere and doesn't appear on the speech-to-text leaderboards I
+checked, so nothing here is a leaderboard rank.
+
+What I *did* measure is the plumbing, and it's worth stating precisely because
+it's easy to assume otherwise: dictation uploads a WebM file to
+`/backend-api/transcribe` and opens **no WebSocket and no WebRTC connection**.
+So whichever audio model transcribes it server-side, the request itself does not
+travel the streaming Realtime API path — it's a batch upload.
 
 ## How it works
 
