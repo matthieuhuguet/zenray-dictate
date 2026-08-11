@@ -86,18 +86,37 @@
     clearComposer();
     b.click();
 
-    // Confirm the page really entered dictation mode.
-    waitFor(() => !!button('Submit dictation'), 2500).then((ok) => {
-      if (ok) {
-        send('recording', '');
-      } else if (micBlocked()) {
-        send('mic-blocked', '');
-      } else {
-        send('start-failed', 'ChatGPT did not enter dictation mode.');
+    // Confirm the page really entered dictation mode. Granting the microphone
+    // and spinning up the recorder can take a moment on a cold page, hence the
+    // generous window, and one retry before giving up.
+    waitFor(() => !!button('Submit dictation'), 4000).then((ok) => {
+      if (ok) return send('recording', '');
+      if (micBlocked()) return send('mic-blocked', '');
+
+      const again = button('Start dictation');
+      if (!again) {
+        return send('start-failed', 'Dictation controls vanished from the page.');
       }
+      again.click();
+      waitFor(() => !!button('Submit dictation'), 4000).then((ok2) => {
+        if (ok2) return send('recording', '');
+        if (micBlocked()) return send('mic-blocked', '');
+        send('start-failed', 'ChatGPT refused to start dictating.');
+      });
     });
     return 'starting';
   };
+
+  /// What the page looks like right now, for diagnosing a refusal.
+  window.__zrDiagnose = () =>
+    JSON.stringify({
+      url: location.href,
+      visibility: document.visibilityState,
+      micBanner: micBlocked(),
+      start: !!button('Start dictation'),
+      submit: !!button('Submit dictation'),
+      cancel: !!button('Cancel dictation')
+    });
 
   window.__zrStop = () => {
     const b = button('Submit dictation');

@@ -99,11 +99,13 @@ final class DictationEngine: NSObject {
         }
 
         set(.starting)
-        // If the page never confirms, come back to idle rather than hang.
-        arm(seconds: 4) { [weak self] in
+        // The bridge waits up to twice four seconds and retries once, so this
+        // only fires if the page stopped answering altogether.
+        arm(seconds: 11) { [weak self] in
             guard let self, self.state == .starting else { return }
             self.set(.idle)
-            self.onFailure?(.other("ChatGPT did not start dictating."))
+            self.onFailure?(.other("ChatGPT stopped responding."))
+            self.logDiagnosis()
         }
         webView.evaluateJavaScript("window.__zrStart()")
     }
@@ -158,26 +160,53 @@ final class DictationEngine: NSObject {
         loginWindow?.orderOut(nil)
         loginWindow?.contentView = NSView()
         webView.removeFromSuperview()
-        offscreenHost.addSubview(webView)
+        // Keep a desktop sized frame so ChatGPT renders its wide layout, with
+        // the dictation controls the bridge looks for.
+        webView.frame = NSRect(x: 0, y: 0, width: 1100, height: 800)
+        webView.autoresizingMask = []
+        stealthHost.addSubview(webView)
+        stealthWindow?.orderFront(nil)
     }
 
-    /// The web view must stay in a view hierarchy or WebKit throttles it.
-    private lazy var offscreenHost: NSView = {
-        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1100, height: 800))
+    /// Where the web view lives when the ChatGPT window is closed.
+    ///
+    /// It cannot simply be parked offscreen or at alpha zero: macOS then reports
+    /// the window as occluded, WebKit suspends the page, and the dictation never
+    /// starts. That is exactly the "ChatGPT did not enter dictation mode" the app
+    /// used to show as soon as the window was hidden.
+    ///
+    /// So the window stays genuinely visible, but one point wide, parked in a
+    /// screen corner and sitting below every ordinary window. The web view keeps
+    /// its full size inside it and is clipped away by the window bounds, which
+    /// leaves the page laid out for desktop and fully awake.
+    private lazy var stealthHost: NSView = {
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+
         let window = NSWindow(
-            contentRect: host.frame, styleMask: [.borderless],
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.borderless],
             backing: .buffered, defer: false
         )
         window.contentView = host
-        window.alphaValue = 0
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
         window.ignoresMouseEvents = true
-        window.setFrameOrigin(NSPoint(x: -5000, y: -5000))
+        window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        if let screen = NSScreen.main {
+            window.setFrameOrigin(NSPoint(x: screen.frame.minX, y: screen.frame.minY))
+        }
         window.orderFront(nil)
+
+        stealthWindow = window
         host.addSubview(webView)
         return host
     }()
 
-    func warmUp() { _ = offscreenHost }
+    private var stealthWindow: NSWindow?
+
+    func warmUp() { _ = stealthHost }
 
     // MARK: - Internals
 
@@ -195,6 +224,14 @@ final class DictationEngine: NSObject {
     private func stopWatchdog() {
         watchdog?.invalidate()
         watchdog = nil
+    }
+
+    /// Writes what the page actually looked like when it refused, so a failure
+    /// can be diagnosed from the log instead of guessed at.
+    func logDiagnosis() {
+        webView.evaluateJavaScript("window.__zrDiagnose && window.__zrDiagnose()") { result, _ in
+            NSLog("[ZenRayDictate] page state: %@", (result as? String) ?? "no bridge")
+        }
     }
 }
 
@@ -229,6 +266,7 @@ extension DictationEngine: WKScriptMessageHandler {
             stopWatchdog()
             set(.idle)
             onFailure?(.other(payload))
+            logDiagnosis()
 
         case "transcript":
             stopWatchdog()
