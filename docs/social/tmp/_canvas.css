@@ -1,0 +1,97 @@
+/* ============================================================
+   ZenRay HTML Photoshop — shared canvas
+   ------------------------------------------------------------
+   One fixed canvas size for every slide: 1080 x 1350, the 4:5
+   Instagram portrait format. The canvas NEVER grows with its
+   content — content is laid out inside a fixed frame, exactly
+   like an artboard. Anything that overflows is a layout bug to
+   fix, not a canvas to stretch.
+
+   The 2x export (2160 x 2700) is produced by the renderer with
+   --force-device-scale-factor=2, so nothing in this file needs
+   to change for the high-res version.
+   ============================================================ */
+
+:root {
+  --canvas-w: 1080px;
+  --canvas-h: 1350px;
+
+  --ink:        #2b2b2b;   /* primary text */
+  --ink-soft:   #6b6b6b;   /* secondary text */
+  --ink-faint:  #8a8a8a;   /* caveats, footnotes */
+  --rule:       #e6e6e6;   /* hairlines */
+
+  --accent-warn: #c94f3a;  /* the "problem" red */
+  --accent-ok:   #2f8f5b;  /* the "solution" green */
+  --accent-gold: #b3862c;  /* eyebrow gold, matches the highlight */
+
+  --pad: 72px;
+}
+
+@font-face {
+  font-family: 'AnthropicSans';
+  src: url('file:///Users/zenray/Library/Fonts/AnthropicSans-Medium.ttf') format('truetype');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'AnthropicSans';
+  src: url('file:///Users/zenray/Library/Fonts/AnthropicSans-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+}
+@font-face {
+  font-family: 'DidonesqueStencil';
+  src: url('file:///Users/zenray/Library/Fonts/Didonesque-Stencil-Bold.otf') format('opentype');
+}
+@font-face {
+  font-family: 'GoldenHopes';
+  src: url('file:///Users/zenray/Library/Fonts/GoldenHopes_PERSONAL_USE_ONLY.otf') format('opentype');
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* The artboard. Fixed size, never scrolls, never grows. */
+.canvas {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Pushes remaining space where you want it, so a fixed-height
+   artboard distributes rather than piles up at the top. */
+.spacer { flex: 1 1 auto; }
+
+/* ---------- shared type ---------- */
+
+.eyebrow {
+  font-family: 'AnthropicSans', sans-serif;
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.headline {
+  font-family: 'DidonesqueStencil', serif;
+  color: var(--ink);
+  text-align: center;
+  text-transform: uppercase;
+  line-height: 1.06;
+}
+
+.body {
+  font-family: 'AnthropicSans', sans-serif;
+  font-weight: 500;
+  color: var(--ink);
+}
+.body b { font-weight: 600; }

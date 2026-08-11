@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Slide 3 — the solution</title>
+<link rel="stylesheet" href="_canvas.css">
+<style>
+  .eyebrow { color: var(--accent-ok); }
+  .headline { font-size: 84px; margin-top: 18px; }
+
+  .keys { display: flex; gap: 20px; align-items: center; }
+  .keys + .keys { margin-top: 14px; }
+  .key {
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 600;
+    font-size: 29px;
+    color: var(--ink);
+    background: #f4f4f4;
+    border: 1px solid #e2e2e2;
+    border-radius: 14px;
+    padding: 13px 26px;
+    min-width: 108px;
+    text-align: center;
+  }
+  .keys .what {
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 500;
+    font-size: 27px;
+    color: var(--ink-soft);
+  }
+
+  .list { width: 100%; max-width: 800px; }
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+  }
+  .item + .item { margin-top: 24px; }
+  .item .dot {
+    flex: none;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent-ok);
+    margin-top: 14px;
+  }
+  .item p { font-size: 30px; line-height: 1.38; }
+
+  .footer {
+    padding-top: 28px;
+    border-top: 1px solid var(--rule);
+    width: 100%;
+    max-width: 880px;
+    text-align: center;
+  }
+  .footer .repo {
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 600;
+    font-size: 28px;
+    color: var(--ink);
+  }
+  .footer .sub {
+    margin-top: 8px;
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 500;
+    font-size: 21px;
+    color: var(--ink-faint);
+  }
+</style>
+</head>
+<body>
+  <div class="canvas">
+
+    <div class="eyebrow">The solution</div>
+    <div class="headline">Two keys.<br>Free.</div>
+
+    <div class="spacer"></div>
+
+    <div class="keys">
+      <div class="key">Fn</div>
+      <div class="what">show / hide</div>
+    </div>
+    <div class="keys">
+      <div class="key">⌘ D</div>
+      <div class="what">start / stop</div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="list">
+      <div class="item">
+        <div class="dot"></div>
+        <p class="body">Fn shows or hides a tiny ChatGPT window.</p>
+      </div>
+      <div class="item">
+        <div class="dot"></div>
+        <p class="body">Cmd+D starts and stops dictation on the real ChatGPT composer.</p>
+      </div>
+      <div class="item">
+        <div class="dot"></div>
+        <p class="body">The transcript lands on your <b>clipboard</b> automatically. Cmd+V, done.</p>
+      </div>
+      <div class="item">
+        <div class="dot"></div>
+        <p class="body"><b>Free</b> — it uses your own ChatGPT account, not a paid transcription API.</p>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="footer">
+      <div class="repo">github.com/matthieuhuguet/zenray-dictate</div>
+      <div class="sub">MIT licensed · open source · issues and PRs welcome</div>
+    </div>
+
+  </div>
+</body>
+</html>

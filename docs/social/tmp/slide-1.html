@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Slide 1 — the question</title>
+<link rel="stylesheet" href="_canvas.css">
+<style>
+  /* Assets stack in numbered order: 1-title-script, 2-title-caps,
+     3-waveform. wer-chart.png keeps its unindexed name on purpose —
+     it is re-derived from the Desktop screenshot each run and carries
+     its own 50% yellow highlight over the GPT Transcribe, OpenAI bar. */
+
+  .question {
+    font-family: 'AnthropicSans', sans-serif;
+    font-weight: 500;
+    font-size: 38px;
+    line-height: 1.3;
+    color: var(--ink);
+    text-align: center;
+    max-width: 900px;
+  }
+  .question .models {
+    display: block;
+    margin-top: 12px;
+    font-size: 26px;
+    color: var(--ink-soft);
+  }
+
+  .lockup { text-align: center; }
+  .lockup img.script { width: 380px; display: block; margin: 0 auto; }
+  .lockup img.caps   { width: 936px; display: block; margin: 2px auto 0; }
+
+  .waveform {
+    width: 100%;
+    border-radius: 26px;
+    overflow: hidden;
+  }
+  .waveform img { width: 100%; display: block; }
+
+  .chart {
+    width: 100%;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .chart img { width: 100%; display: block; }
+</style>
+</head>
+<body>
+  <div class="canvas">
+
+    <div class="question">
+      Are there any good (AI dictation) alternatives in 2026?
+      <span class="models">Wispr Flow / SuperWhisper / Handy …</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="lockup">
+      <img class="script" src="1-title-script.png">
+      <img class="caps" src="2-title-caps.png">
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="waveform">
+      <img src="3-waveform.png">
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="chart">
+      <img src="wer-chart.png">
+    </div>
+
+  </div>
+</body>
+</html>
