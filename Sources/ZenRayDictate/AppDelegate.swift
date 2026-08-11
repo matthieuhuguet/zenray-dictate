@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var fnWorks = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Log.write("launched, microphone status \(Permissions.microphone.rawValue)")
         engine.warmUp()
         pill.prewarm()
         buildStatusItem()
@@ -47,13 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The permission free shortcut is the one that is guaranteed to work,
         // so it goes in first and stays in whatever happens to Fn.
         hotKey.onPress = trigger
-        if !hotKey.register() {
-            NSLog("[ZenRayDictate] could not register the global shortcut")
-        }
+        hotKey.register()
 
         // Fn is a bonus on top, available only while Accessibility holds.
         fnKey.onPress = trigger
         fnWorks = fnKey.start()
+        Log.write("accessibility trusted: \(Permissions.accessibility), Fn active: \(fnWorks)")
         if fnWorks {
             installEscape()
         } else {
@@ -103,7 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.removeAllItems()
 
         let status: String
-        if Permissions.microphone != .authorized {
+        if !hotKey.isRegistered {
+            status = "Shortcut \(GlobalHotKey.defaultDescription) is taken by another app"
+        } else if Permissions.microphone != .authorized {
             status = "Microphone not allowed"
         } else if !engine.isReady {
             status = "Not signed in to ChatGPT"

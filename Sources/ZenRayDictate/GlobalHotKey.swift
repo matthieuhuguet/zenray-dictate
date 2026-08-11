@@ -23,12 +23,20 @@ final class GlobalHotKey {
 
     private let id: UInt32
 
-    /// Control Option D, chosen because macOS ships nothing on it.
+    /// Control Option Command D.
+    ///
+    /// Three modifiers on purpose: if the shortcut ever fails to register, the
+    /// keystroke falls through to whatever app has focus, and this combination
+    /// types nothing at all. Two modifiers produced a stray glyph instead,
+    /// which is how a silent registration failure came to look like a typo.
     static let defaultKeyCode = UInt32(kVK_ANSI_D)
-    static let defaultModifiers = UInt32(controlKey | optionKey)
+    static let defaultModifiers = UInt32(controlKey | optionKey | cmdKey)
 
     /// How the shortcut reads in a menu.
-    static let defaultDescription = "⌃⌥D"
+    static let defaultDescription = "⌃⌥⌘D"
+
+    /// Whether the shortcut is currently held by this app.
+    private(set) var isRegistered = false
 
     init() {
         id = Self.nextID
@@ -53,6 +61,7 @@ final class GlobalHotKey {
                 event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                 nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID
             )
+            Log.write("shortcut fired, id \(hotKeyID.id)")
             if let instance = GlobalHotKey.instances[hotKeyID.id] {
                 DispatchQueue.main.async { instance.onPress?() }
             }
@@ -65,7 +74,15 @@ final class GlobalHotKey {
         let status = RegisterEventHotKey(
             keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref
         )
-        return status == noErr && ref != nil
+        isRegistered = (status == noErr && ref != nil)
+
+        if isRegistered {
+            Log.write("shortcut registered: keyCode \(keyCode), modifiers \(modifiers)")
+        } else {
+            // -9878 is eventHotKeyExistsErr, meaning another app already holds it.
+            Log.write("shortcut FAILED to register, OSStatus \(status)")
+        }
+        return isRegistered
     }
 
     func unregister() {
