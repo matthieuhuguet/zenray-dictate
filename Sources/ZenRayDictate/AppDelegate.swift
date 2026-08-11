@@ -5,9 +5,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let engine = DictationEngine()
     private let composer = ComposerWindow()   // the real ChatGPT bar
     private let pill = PillWindow()           // only for failures and notices
-    private let fnKey = FnKeyMonitor()
+    private let fnKey = FnKeyMonitor()          // needs Accessibility
+    private let hotKey = GlobalHotKey()         // needs nothing, always works
     private var statusItem: NSStatusItem!
     private var escapeMonitor: Any?
+    private var fnWorks = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         engine.warmUp()
@@ -32,32 +34,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startHotKey() {
-        fnKey.onPress = { [weak self] in
+        let trigger: () -> Void = { [weak self] in
             guard let self else { return }
             // The bar comes up on the key press itself, before any round trip
-            // to the page, so Fn always produces something on screen at once.
+            // to the page, so the shortcut always produces something at once.
             if self.engine.state == .idle, self.engine.isReady {
                 self.composer.show(self.engine.webView)
             }
             self.engine.toggle()
         }
 
-        if fnKey.start() {
-            installEscape()
-            return
+        // The permission free shortcut is the one that is guaranteed to work,
+        // so it goes in first and stays in whatever happens to Fn.
+        hotKey.onPress = trigger
+        if !hotKey.register() {
+            NSLog("[ZenRayDictate] could not register the global shortcut")
         }
 
-        // Without this right the key only reaches the app while it is
-        // frontmost, so there is no point pretending it works.
-        Permissions.requestAccessibility()
-        Permissions.openAccessibilitySettings()
-        pill.fail("Fn needs Accessibility to work outside this app",
-                  hint: "Tick ZenRayDictate in System Settings > Privacy > Accessibility")
+        // Fn is a bonus on top, available only while Accessibility holds.
+        fnKey.onPress = trigger
+        fnWorks = fnKey.start()
+        if fnWorks {
+            installEscape()
+        } else {
+            watchForAccessibility()
+        }
+        rebuildMenu()
+    }
 
-        Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
+    /// Accessibility is granted against the binary's signature, and an ad-hoc
+    /// signature changes at every build, so the right can disappear without the
+    /// tick in System Settings ever changing. Re-checking keeps Fn honest.
+    private func watchForAccessibility() {
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             guard self.fnKey.start() else { return }
             timer.invalidate()
+            self.fnWorks = true
             self.installEscape()
             self.rebuildMenu()
             self.pill.flash("Fn works everywhere now")
@@ -90,16 +103,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.removeAllItems()
 
         let status: String
-        if let gaps = Permissions.missing() {
-            status = "Missing \(gaps)"
+        if Permissions.microphone != .authorized {
+            status = "Microphone not allowed"
         } else if !engine.isReady {
             status = "Not signed in to ChatGPT"
         } else {
-            status = "Press Fn to dictate"
+            status = "Press \(GlobalHotKey.defaultDescription) to dictate"
         }
         let hint = NSMenuItem(title: status, action: nil, keyEquivalent: "")
         hint.isEnabled = false
         menu.addItem(hint)
+
+        let fnLine = NSMenuItem(
+            title: fnWorks ? "Fn also works" : "Fn needs Accessibility",
+            action: fnWorks ? nil : #selector(fixAccessibility),
+            keyEquivalent: ""
+        )
+        fnLine.target = fnWorks ? nil : self
+        fnLine.isEnabled = !fnWorks
+        menu.addItem(fnLine)
         menu.addItem(.separator())
 
         add(menu, "Sign in to ChatGPT…", #selector(openLogin))
