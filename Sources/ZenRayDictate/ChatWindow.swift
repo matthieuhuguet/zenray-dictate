@@ -1,13 +1,28 @@
 import AppKit
 import WebKit
 
+/// A borderless window that CAN become key.
+///
+/// AppKit denies key window status to any window whose style mask is
+/// `.borderless`, by design: borderless was meant for decorative overlays,
+/// not for windows the user types into. The consequence was total: every
+/// click on a button in the capsule still worked, because clicks do not
+/// require key status, but no keystroke ever reached the page, not Escape,
+/// not backspace while editing text, nothing, which is what forced quitting
+/// the app to escape. Overriding this is the standard fix for a borderless
+/// window that still needs to be typed into.
+private final class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 /// The whole app: one borderless capsule holding real chatgpt.com, trimmed
-/// down to its composer bar. Cmd+D (or Fn) shows or hides it. You click Start
-/// Dictation and Stop Dictation yourself, on the real page; this class only
-/// watches for the transcript and copies it to the clipboard.
+/// down to its composer bar. Cmd+D drives Start/Stop Dictation directly; Fn
+/// shows or hides the window. Clicking Start/Stop by hand on the real page
+/// still works too; this class only watches for the transcript and copies it
+/// to the clipboard.
 final class ChatWindow: NSObject {
 
-    private var window: NSPanel!
+    private var window: KeyablePanel!
     private var webView: WKWebView!
     private(set) var isReady = false
     private var isCompact = true
@@ -39,7 +54,7 @@ final class ChatWindow: NSObject {
             + "(KHTML, like Gecko) Version/18.0 Safari/605.1.15"
         makeTransparent()
 
-        window = NSPanel(
+        window = KeyablePanel(
             contentRect: CGRect(origin: .zero, size: compactSize),
             styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered, defer: false
@@ -48,7 +63,11 @@ final class ChatWindow: NSObject {
         window.level = .floating
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.hasShadow = true
+        // AppKit computes a rectangular shadow from the window frame, which
+        // sat wrong against a transparent, non-rectangular pill and showed up
+        // as a faint curved shape below it. ChatGPT's own CSS already draws
+        // the pill's shadow, so the window does not need to draw one too.
+        window.hasShadow = false
         window.hidesOnDeactivate = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
@@ -124,6 +143,17 @@ final class ChatWindow: NSObject {
         position()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// What Cmd+D does: reveal the bar if it was hidden, then click whichever
+    /// of Start or Stop Dictation is currently on the page. Stateless by
+    /// design, it asks the live DOM rather than tracking a state of its own,
+    /// so it can never drift out of sync with what the page is actually doing.
+    func toggleDictation() {
+        if !window.isKeyWindow { show() }
+        webView.evaluateJavaScript("window.__zrToggleDictation && window.__zrToggleDictation()") { result, _ in
+            Log.write("dictation toggle: \((result as? String) ?? "bridge not ready")")
+        }
     }
 
     private func position() {

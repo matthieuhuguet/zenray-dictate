@@ -115,6 +115,25 @@
 
   window.__zrCompact = compact;
 
+  // --- 3. drive dictation from Cmd+D -------------------------------------
+
+  // Matched by pattern, not by an exact label: the stop control has been seen
+  // as "Submit dictation" on one build and "Stop dictation" on another.
+  // Hard coding either one made the app believe dictation had vanished while
+  // it was in fact still running.
+  const match = (re) =>
+    [...document.querySelectorAll('button')].find((b) =>
+      re.test(b.getAttribute('aria-label') || '')
+    );
+
+  window.__zrToggleDictation = () => {
+    const stop = match(/(stop|submit|finish|end|done)\s+dictation/i);
+    if (stop) { stop.click(); return 'stopped'; }
+    const start = match(/start\s+dictation|begin\s+dictation/i);
+    if (start) { start.click(); return 'started'; }
+    return 'no-button';
+  };
+
   // --- readiness --------------------------------------------------------------
 
   const poll = setInterval(() => {

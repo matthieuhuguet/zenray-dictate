@@ -16,12 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !granted { Permissions.openMicrophoneSettings() }
         }
 
-        let trigger: () -> Void = { [weak self] in self?.chat.toggle() }
-
-        hotKey.onPress = trigger
+        // Cmd+D drives the dictation itself: reveal the bar if needed, then
+        // click whichever of Start or Stop Dictation the page is showing.
+        hotKey.onPress = { [weak self] in self?.chat.toggleDictation() }
         hotKey.register()
 
-        fnKey.onPress = trigger
+        // Fn is a separate, simpler gesture: just show or hide the window.
+        fnKey.onPress = { [weak self] in self?.chat.toggle() }
         let fnStarted = fnKey.start()
         Log.write("accessibility trusted: \(Permissions.accessibility), Fn tap started: \(fnStarted)")
         if !fnStarted {
@@ -43,7 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
-        let hint = NSMenuItem(title: "Press \(GlobalHotKey.defaultDescription) to show the bar", action: nil, keyEquivalent: "")
+        let hint = NSMenuItem(
+            title: "\(GlobalHotKey.defaultDescription) starts/stops dictation, Fn shows/hides",
+            action: nil, keyEquivalent: ""
+        )
         hint.isEnabled = false
         menu.addItem(hint)
         menu.addItem(.separator())
