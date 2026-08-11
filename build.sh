@@ -34,7 +34,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>
 
-    <!-- Menu bar only, no Dock icon, keeps running in the background. -->
+    <!-- Menu bar only, no Dock icon. Fn (or the menu) brings the window back,
+         so there is no need for a Dock icon to find it. -->
     <key>LSUIElement</key>               <true/>
 
     <!-- The embedded page records your voice. -->
@@ -68,6 +69,7 @@ echo "Built $(pwd)/$APP"
 echo
 echo "First run:"
 echo "  open $APP"
-echo "  1. Menu bar mic icon > Sign in to ChatGPT, log in, then Hide the window."
-echo "  2. Grant Accessibility when asked (needed to watch the Fn key)."
-echo "  3. Press Fn to dictate."
+echo "  1. Log in to ChatGPT in the window that opens."
+echo "  2. Grant the microphone and, if asked, Accessibility (for the Fn key)."
+echo "  3. Press Fn any time to show or hide the window."
+echo "  4. Click Start Dictation, talk, click Stop Dictation. Copied automatically."

@@ -1,27 +1,25 @@
 # ZenRay Dictate
 
-Une pastille ChatGPT flottante, pilotée par la touche Fn, qui dépose la
-transcription dans le presse-papier.
+Fn fait apparaître ou disparaître une fenêtre ChatGPT. C'est tout ce que l'app
+fait. La dictée elle-même, c'est la vraie page ChatGPT qui la gère : tu cliques
+sur `Start Dictation`, tu parles, tu cliques sur `Stop Dictation`, et le texte
+part automatiquement dans le presse-papier.
 
-L'app tourne en arrière-plan, sans icône au Dock. Un appui sur Fn fait
-apparaître la pastille au premier plan et lance la dictée. Un second appui
-affiche `Transcribing…`, puis la pastille disparaît et le texte est déjà dans le
-presse-papier. Un `Cmd+V` et c'est collé.
+## Pourquoi si simple
+
+Trois versions plus construites ont montré que reconstruire l'interface de
+ChatGPT en SwiftUI, deviner ses libellés de boutons, ou distinguer les états
+d'enregistrement, ajoutait de la fragilité sans rien apporter. La page fait
+déjà tout ça correctement. L'app n'a qu'un rôle : la garder en fond, connectée,
+et attraper le texte qui en sort.
 
 ## Comment ça marche
 
-L'app embarque une page chatgpt.com invisible, où ta session vit une fois pour
-toutes. Elle ne reconstruit pas la requête de transcription : elle **clique sur
-la dictée de la page et écoute la réponse**.
-
-Cette décision vient d'une mesure faite le 11 août 2026, directement dans la
-session Chrome de Matthieu. Le bouton micro de ChatGPT poste un WebM sur
-`/backend-api/transcribe` et reçoit `{"text": …, "asset_format": "webm"}`. Aucun
-WebSocket ni WebRTC n'est ouvert pendant le cycle, donc la dictée n'est pas du
-Realtime, contrairement au gros bouton voix voisin. La page fait donc
-l'enregistrement, l'encodage et l'envoi comme elle sait le faire, et `bridge.js`
-n'intercepte que le texte qui revient. Rien à deviner, rien à maintenir sur le
-format du corps de la requête.
+L'app embarque une page chatgpt.com dans une fenêtre normale. Elle ne
+reconstruit pas la requête de transcription : elle **regarde passer la
+réponse** de `POST /backend-api/transcribe`, dont le corps est
+`{"text": …, "asset_format": "webm"}`, et copie ce texte dans le presse-papier.
+Rien d'autre n'est injecté ni cliqué à sa place.
 
 ## Construire
 
@@ -30,49 +28,46 @@ format du corps de la requête.
 open ZenRayDictate.app
 ```
 
-## Premier lancement, trois étapes
+## Premier lancement
 
-**1. Connexion.** Icône micro dans la barre de menus, `Sign in to ChatGPT…`,
-tu te connectes normalement, puis `Hide the ChatGPT window`. La session persiste
-entre les lancements, tu ne le refais pas.
+**1.** La fenêtre s'ouvre toute seule. Connecte-toi normalement à ChatGPT. La
+session persiste ensuite entre les lancements.
 
-**2. Accessibilité.** macOS la demande au premier appui, elle sert uniquement à
-observer la touche Fn. L'app se met à écouter dès que tu l'accordes, sans
-redémarrage.
+**2.** Accorde le micro à l'invite. Si Fn ne répond pas ailleurs que dans l'app,
+accorde aussi l'accessibilité (Réglages Système, Confidentialité,
+Accessibilité), et va dans Réglages Système, Clavier, « Appuyer sur la touche
+🌐 pour » et choisis « Ne rien faire », sinon macOS capte la touche avant l'app.
 
-**3. Micro.** Accordé une fois, à l'app elle-même, au premier enregistrement.
+## Utilisation
 
-## Le point qui casse tout si on l'oublie
-
-macOS attribue Fn à sa propre fonction. Va dans **Réglages Système > Clavier >
-« Appuyer sur la touche 🌐 pour »** et choisis **« Ne rien faire »**, sinon Fn
-ouvre le sélecteur d'emoji ou la dictée d'Apple par-dessus la pastille.
-
-L'app écoute la touche en mode `listenOnly`, donc elle ne l'intercepte jamais et
-ne prive aucune autre application de Fn.
+Fn ouvre la fenêtre. `Start Dictation`, tu parles, `Stop Dictation`. Le texte
+est déjà dans le presse-papier, `Cmd+V` pour le coller. Fn de nouveau referme
+la fenêtre.
 
 ## Structure
 
 | Fichier | Rôle |
 |---|---|
 | `main.swift` | Démarrage, mode accessoire, aucun Dock |
-| `AppDelegate.swift` | Barre de menus, câblage, presse-papier |
+| `AppDelegate.swift` | Barre de menus, permissions, câblage de Fn |
 | `FnKeyMonitor.swift` | `CGEventTap` sur Fn, un déclenchement par appui |
-| `DictationEngine.swift` | WebView cachée, machine à trois états, pont JS |
-| `PillWindow.swift` | La pastille flottante, sans vol de focus |
-| `Resources/bridge.js` | Clique la dictée, écoute `/backend-api/transcribe` |
+| `ChatWindow.swift` | La fenêtre ChatGPT, montrer/cacher, pont JS |
+| `Permissions.swift` | Micro et accessibilité |
+| `Log.swift` | Journal sur disque, `~/Library/Logs/ZenRayDictate.log` |
+| `Resources/bridge.js` | Écoute `/backend-api/transcribe`, rien d'autre |
+
+## Le piège d'accessibilité à connaître
+
+Une signature ad-hoc change à chaque reconstruction. L'accessibilité est
+accordée contre cette signature, donc **elle se révoque toute seule à chaque
+build**, même si la case reste cochée dans les Réglages. C'est sans
+conséquence pour l'usage courant, Fn continue de fonctionner tant que l'app
+n'est pas reconstruite ; ça compte seulement pendant le développement.
 
 ## Limites connues
 
-La transcription abandonne au bout de 25 secondes si la réponse ne revient
-jamais, et la pastille affiche l'erreur plutôt que de rester bloquée.
-
-La dictée s'ouvre dans une conversation temporaire, si bien que rien ne se
-dépose dans ton historique ChatGPT.
-
-L'app dépend des libellés d'accessibilité `Start dictation` et
-`Submit dictation` de la page. Si OpenAI les renomme, la pastille affichera
-`Could not start dictation` et il faudra ajuster `bridge.js`.
-
 L'accès automatisé à ChatGPT contrevient aux conditions d'usage d'OpenAI.
 L'exposition porte sur le compte, décision prise en connaissance de cause.
+
+La dictée s'ouvre dans une conversation temporaire, rien ne se dépose dans
+l'historique ChatGPT.
