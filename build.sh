@@ -34,9 +34,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>
 
-    <!-- Menu bar only, no Dock icon. Fn (or the menu) brings the window back,
-         so there is no need for a Dock icon to find it. -->
-    <key>LSUIElement</key>               <true/>
+    <!-- Regular app: shows in the Dock, so clicking the icon is a way in that
+         does not depend on Fn or on a crowded menu bar. -->
 
     <!-- The embedded page records your voice. -->
     <key>NSMicrophoneUsageDescription</key>

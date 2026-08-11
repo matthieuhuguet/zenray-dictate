@@ -64,12 +64,17 @@ final class ChatWindow: NSObject {
 
     // MARK: - Show / hide, the whole interaction
 
+    /// Decided on whether the window is IN FRONT, not merely visible.
+    ///
+    /// A window can be open yet sitting behind another app; `isVisible` stays
+    /// true in that case. Toggling on `isVisible` alone then hid a window the
+    /// user could not actually see, which produced no change on screen and
+    /// looked exactly like Fn "only working while the app already had focus".
     func toggle() {
-        if window.isVisible {
+        if window.isKeyWindow {
             window.orderOut(nil)
         } else {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            show()
         }
     }
 

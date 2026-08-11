@@ -62,4 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showChat() { chat.show() }
     @objc private func reload() { chat.load() }
+
+    /// Clicking the Dock icon while the window is hidden must bring it back.
+    /// Without this, orderOut(nil) leaves the app running with no visible way
+    /// in from the Dock, which defeats the point of having an icon there.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        chat.show()
+        return true
+    }
 }
