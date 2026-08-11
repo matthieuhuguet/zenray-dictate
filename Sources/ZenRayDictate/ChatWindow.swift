@@ -27,6 +27,8 @@ final class ChatWindow: NSObject {
     private(set) var isReady = false
     private var isCompact = true
     private var compactSize = CGSize(width: 620, height: 90)
+    /// Set once, from the first 'compact' report, and never changed again.
+    private var lockedWidth: CGFloat?
 
     override init() {
         super.init()
@@ -114,6 +116,7 @@ final class ChatWindow: NSObject {
 
     func backToCompact() {
         isCompact = true
+        lockedWidth = nil   // a fresh page load earns a fresh measurement
         window.styleMask = [.borderless, .nonactivatingPanel, .resizable]
         makeTransparent()
         load()   // reloading is what re-triggers the compact bridge on 'ready'
@@ -186,13 +189,22 @@ extension ChatWindow: WKScriptMessageHandler {
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let w = json["width"] as? Double,
                   let h = json["height"] as? Double else { return }
-            let next = CGSize(width: min(w, 900), height: h)
-            // A second, independent guard against the resize feedback loop:
-            // even with the JS side debounced, a change this small is Retina
-            // point/pixel rounding noise, not new content, and re-applying it
-            // is exactly what could set the loop off again.
-            guard abs(next.width - compactSize.width) > 1.5
-               || abs(next.height - compactSize.height) > 1.5 else { return }
+
+            // Debouncing the JS side only slowed the loop down, it did not
+            // break it, because WIDTH was still being re-applied every time:
+            // setContentSize resizes WKWebView (it fills the window's content
+            // view exactly), which changes the CSS viewport width the page is
+            // laid out at, which can reflow the very composer being watched,
+            // which fires the observer again. Locking the width the first
+            // time it is known and never touching it again removes that path
+            // entirely: only height can still change window to window, and a
+            // taller window does not alter the page's rendered width, so it
+            // cannot reflow anything horizontally and cannot re-trigger this.
+            let width = lockedWidth ?? min(w, 900)
+            if lockedWidth == nil { lockedWidth = width }
+            let next = CGSize(width: width, height: h)
+
+            guard abs(next.height - compactSize.height) > 1.5 else { return }
             compactSize = next
             window.setContentSize(compactSize)
             position()
