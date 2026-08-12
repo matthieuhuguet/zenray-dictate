@@ -42,11 +42,6 @@ final class ChatWindow: NSObject {
 
         let controller = WKUserContentController()
         controller.add(self, name: "zenray")
-        if let audio = Self.audioRoutingSource() {
-            controller.addUserScript(
-                WKUserScript(source: audio, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-            )
-        }
         if let js = Self.bridgeSource() {
             controller.addUserScript(
                 WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
@@ -97,17 +92,6 @@ final class ChatWindow: NSObject {
         let dev = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .appendingPathComponent("Resources/bridge.js")
-        return try? String(contentsOf: dev, encoding: .utf8)
-    }
-
-    private static func audioRoutingSource() -> String? {
-        if let url = Bundle.main.url(forResource: "audio-routing", withExtension: "js"),
-           let s = try? String(contentsOf: url, encoding: .utf8) {
-            return s
-        }
-        let dev = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .appendingPathComponent("Resources/audio-routing.js")
         return try? String(contentsOf: dev, encoding: .utf8)
     }
 
@@ -169,6 +153,10 @@ final class ChatWindow: NSObject {
     /// design, it asks the live DOM rather than tracking a state of its own,
     /// so it can never drift out of sync with what the page is actually doing.
     func toggleDictation() {
+        guard AudioInput.selectPreferred() != nil else {
+            Log.write("dictation blocked: no MacBook Pro or iPhone microphone")
+            return
+        }
         if !window.isKeyWindow { show() }
         webView.evaluateJavaScript("window.__zrToggleDictation && window.__zrToggleDictation()") { result, _ in
             Log.write("dictation toggle: \((result as? String) ?? "bridge not ready")")

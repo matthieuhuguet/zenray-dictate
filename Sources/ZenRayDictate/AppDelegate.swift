@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.write("launched")
         buildStatusItem()
         LoginItem.enable()
+        AudioInput.startKeepingPreferred()
 
         Permissions.requestMicrophone { granted in
             if !granted { Permissions.openMicrophoneSettings() }
