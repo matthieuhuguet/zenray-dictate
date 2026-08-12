@@ -2,7 +2,7 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private let chat = ChatWindow()
+    private lazy var chat = ChatWindow()
     private let hotKey = GlobalHotKey()   // Cmd+D, needs no permission
     private let fnKey = FnKeyMonitor()    // Fn, bonus once Accessibility holds
     private var statusItem: NSStatusItem!
@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         LoginItem.enable()
         AudioInput.startKeepingPreferred()
+        _ = chat
 
         Permissions.requestMicrophone { granted in
             if !granted { Permissions.openMicrophoneSettings() }

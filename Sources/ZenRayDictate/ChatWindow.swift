@@ -32,6 +32,7 @@ final class ChatWindow: NSObject {
 
     override init() {
         super.init()
+        Log.write("web view initialized")
         buildWindow()
         load()
     }
