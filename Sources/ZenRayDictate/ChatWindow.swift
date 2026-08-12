@@ -42,6 +42,11 @@ final class ChatWindow: NSObject {
 
         let controller = WKUserContentController()
         controller.add(self, name: "zenray")
+        if let audio = Self.audioRoutingSource() {
+            controller.addUserScript(
+                WKUserScript(source: audio, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+            )
+        }
         if let js = Self.bridgeSource() {
             controller.addUserScript(
                 WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
@@ -92,6 +97,17 @@ final class ChatWindow: NSObject {
         let dev = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .appendingPathComponent("Resources/bridge.js")
+        return try? String(contentsOf: dev, encoding: .utf8)
+    }
+
+    private static func audioRoutingSource() -> String? {
+        if let url = Bundle.main.url(forResource: "audio-routing", withExtension: "js"),
+           let s = try? String(contentsOf: url, encoding: .utf8) {
+            return s
+        }
+        let dev = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/audio-routing.js")
         return try? String(contentsOf: dev, encoding: .utf8)
     }
 

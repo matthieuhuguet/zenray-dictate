@@ -18,6 +18,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/ZenRayDictate"
 cp Sources/ZenRayDictate/Resources/bridge.js "$APP/Contents/Resources/bridge.js"
+cp Sources/ZenRayDictate/Resources/audio-routing.js "$APP/Contents/Resources/audio-routing.js"
 if [[ -f AppIcon.icns ]]; then
     cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
