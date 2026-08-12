@@ -44,7 +44,7 @@ final class ChatWindow: NSObject {
         controller.add(self, name: "zenray")
         if let audio = Self.audioRoutingSource() {
             controller.addUserScript(
-                WKUserScript(source: audio, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+                WKUserScript(source: audio, injectionTime: .atDocumentStart, forMainFrameOnly: false)
             )
         }
         if let js = Self.bridgeSource() {
