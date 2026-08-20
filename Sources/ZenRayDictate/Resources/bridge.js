@@ -57,6 +57,87 @@
     return anchor.closest('form') || anchor.parentElement;
   };
 
+  const findEditor = () =>
+    document.querySelector('#prompt-textarea') ||
+    document.querySelector('div[contenteditable="true"]') ||
+    document.querySelector('textarea');
+
+  const editorText = (editor) => {
+    if (!editor) return '';
+    if ('value' in editor) return editor.value || '';
+    return editor.textContent || '';
+  };
+
+  const updateClearButton = () => {
+    const button = document.getElementById('zr-clear');
+    if (button) button.hidden = !editorText(findEditor()).trim();
+  };
+
+  const focusEditor = () => {
+    const editor = findEditor();
+    if (!editor) return false;
+    editor.focus({ preventScroll: true });
+    return true;
+  };
+
+  const clearEditor = () => {
+    const editor = findEditor();
+    if (!editor) return false;
+
+    editor.focus({ preventScroll: true });
+
+    if (editor instanceof HTMLInputElement || editor instanceof HTMLTextAreaElement) {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(editor), 'value'
+      )?.set;
+      if (valueSetter) valueSetter.call(editor, '');
+      else editor.value = '';
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      const deleted = document.execCommand('delete', false);
+      if (!deleted || editorText(editor).trim()) editor.replaceChildren();
+      editor.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'deleteContentBackward',
+        data: null
+      }));
+    }
+
+    updateClearButton();
+    return true;
+  };
+
+  const installClearButton = () => {
+    let button = document.getElementById('zr-clear');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'zr-clear';
+      button.type = 'button';
+      button.setAttribute('aria-label', 'Clear text');
+      button.title = 'Clear text (⌘Q)';
+      button.textContent = '×';
+      button.addEventListener('mousedown', (event) => event.preventDefault());
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        clearEditor();
+      });
+      document.body.appendChild(button);
+    }
+
+    const editor = findEditor();
+    if (editor && !editor.__zrClearBound) {
+      editor.addEventListener('input', updateClearButton);
+      editor.__zrClearBound = true;
+    }
+    updateClearButton();
+  };
+
   // Applies the hiding/flattening rules to whatever the composer's ancestor
   // chain is RIGHT NOW. Idempotent and cheap, safe to call as often as needed.
   //
@@ -110,6 +191,32 @@
         }
         body { padding: ${PAD}px !important; box-sizing: border-box !important; }
         ::-webkit-scrollbar { display: none !important; }
+
+        #zr-clear {
+          position: fixed;
+          top: 50%;
+          right: 104px;
+          z-index: 10000;
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          border: 0;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transform: translateY(-50%);
+          color: rgba(255, 255, 255, 0.72);
+          background: rgba(255, 255, 255, 0.12);
+          font: 20px/1 -apple-system, BlinkMacSystemFont, sans-serif;
+          cursor: pointer;
+          transition: background 120ms ease, color 120ms ease;
+        }
+        #zr-clear[hidden] { display: none; }
+        #zr-clear:hover {
+          color: #fff;
+          background: rgba(255, 255, 255, 0.24);
+        }
       `;
       document.head.appendChild(style);
     }
@@ -140,6 +247,7 @@
     if (!target) return false;
 
     neutralizeChain(target);
+    installClearButton();
 
     const reportDebounced = () => {
       clearTimeout(debounceTimer);
@@ -160,6 +268,8 @@
   };
 
   window.__zrCompact = compact;
+  window.__zrFocusComposer = focusEditor;
+  window.__zrClearComposer = clearEditor;
 
   // React swaps the composer's DOM subtree between the idle and recording
   // states (see neutralizeChain's comment), so styling once at page load is

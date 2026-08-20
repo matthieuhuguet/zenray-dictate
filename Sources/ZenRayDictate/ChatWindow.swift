@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import WebKit
 
 /// A borderless window that CAN become key.
@@ -29,12 +30,26 @@ final class ChatWindow: NSObject {
     private var compactSize = CGSize(width: 620, height: 90)
     /// Set once, from the first 'compact' report, and never changed again.
     private var lockedWidth: CGFloat?
+    private var localKeyMonitor: Any?
+    private var fadeSerial = 0
 
     override init() {
         super.init()
         Log.write("web view initialized")
         buildWindow()
+        installLocalKeyMonitor()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidResignActive),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
         load()
+    }
+
+    deinit {
+        if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func buildWindow() {
@@ -144,9 +159,82 @@ final class ChatWindow: NSObject {
     }
 
     func show() {
+        fadeSerial += 1
+        window.alphaValue = 1
         position()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        focusComposerSoon()
+    }
+
+    /// Cmd+Q clears only the front compact composer. The event monitor is
+    /// local, so Cmd+Q keeps quitting the app when the bar is not in front and
+    /// remains unchanged in every other application.
+    private func installLocalKeyMonitor() {
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self,
+                  self.isCompact,
+                  self.window.isKeyWindow else { return event }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let character = event.charactersIgnoringModifiers?.lowercased()
+            guard modifiers == .command, character == "q" else { return event }
+
+            self.clearText()
+            return nil
+        }
+    }
+
+    private func focusComposerSoon() {
+        guard isCompact else { return }
+        for delay in [0.0, 0.12, 0.35] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.window.isVisible, self.isCompact else { return }
+                self.webView.evaluateJavaScript(
+                    "window.__zrFocusComposer && window.__zrFocusComposer()"
+                )
+            }
+        }
+    }
+
+    func clearText() {
+        guard isCompact else { return }
+        if !window.isKeyWindow { show() }
+        webView.evaluateJavaScript(
+            "window.__zrClearComposer && window.__zrClearComposer()"
+        ) { result, error in
+            if let error {
+                Log.write("clear text failed: \(error.localizedDescription)")
+            } else {
+                Log.write("clear text: \(String(describing: result))")
+            }
+        }
+        focusComposerSoon()
+    }
+
+    private func fadeOut() {
+        guard isCompact, window.isVisible else { return }
+        fadeSerial += 1
+        let serial = fadeSerial
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            guard let self, self.fadeSerial == serial else { return }
+            self.window.orderOut(nil)
+            self.window.alphaValue = 1
+        }
+    }
+
+    private func fadeOutIfWindowLostKey() {
+        guard !window.isKeyWindow else { return }
+        fadeOut()
+    }
+
+    @objc private func applicationDidResignActive() {
+        fadeOut()
     }
 
     /// What Cmd+D does: reveal the bar if it was hidden, then click whichever
@@ -246,5 +334,11 @@ extension ChatWindow: WKUIDelegate, NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         window.orderOut(nil)
         return false
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            self?.fadeOutIfWindowLostKey()
+        }
     }
 }

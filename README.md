@@ -92,8 +92,10 @@ again after the first run; `build.sh` reuses the same identity from then on.
    app ever sees it.
 
 **Using it.** Cmd+D anywhere: the bar appears, dictation starts. Talk. Cmd+D
-again: it stops, and the text is on your clipboard — `Cmd+V` to paste. Fn
-shows or hides the window on its own, independent of dictation.
+again: it stops, and the text is on your clipboard — `Cmd+V` to paste. When
+the compact bar is in front, `Cmd+Q` clears its text and returns focus to the
+composer; the small `×` button does the same. The bar fades away when you
+click outside it, and Fn still shows or hides it independently of dictation.
 
 ## Known limitations, help wanted
 
@@ -101,6 +103,9 @@ shows or hides the window on its own, independent of dictation.
   another app, and pressing Fn again sometimes does nothing; you have to
   click the app's Dock icon instead. I'd genuinely like help tracking this
   down — issues and PRs welcome.
+- `Cmd+Q` is intentionally local to the compact bar. It clears text only while
+  ZenRay Dictate is the active app, so it does not replace `Cmd+Q` in other
+  applications.
 - Cmd+D is a system-wide shortcut while this app is running, so it stops
   reaching Cmd+D in other apps (Safari's bookmark shortcut, Finder's
   Duplicate) for as long as ZenRay Dictate is open.
