@@ -9,3 +9,7 @@ Journal append only du projet.
 - Échoué : la première compilation après le renommage a réutilisé un cache `.build` contenant l’ancien chemin absolu ; `swift package clean` a supprimé ces artefacts régénérables et la compilation suivante a réussi.
 - Fait : `node --check`, `git diff --check`, compilation Swift arm64, assemblage, signature et lancement du bundle sous le nouveau chemin passent ; une capture visuelle confirme l’affichage du bar compact.
 - Prochain : dans la fenêtre réelle, saisir un texte puis vérifier `⌘Q`, le bouton `×` et le fondu au clic extérieur ; si un détail visuel gêne, corriger uniquement ce détail.
+
+2026-08-20 20:49
+- Fait : les commits `5806722` et `13459fc` sont poussés sur `https://github.com/matthieuhuguet/zenray-dictate.git`, branche `main` ; le SHA local et le SHA distant correspondent à `13459fc6e7507ddb2a03d609d23b0ccf214502b5`.
+- Prochain : effectuer le test manuel des trois interactions dans la fenêtre réelle.
