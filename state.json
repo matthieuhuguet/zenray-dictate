@@ -1,0 +1,13 @@
+{
+  "task": "ZenRayDictate clear shortcut and popover behavior",
+  "status": "awaiting_manual_verification",
+  "updated_at": "2026-08-20 20:45 Asia/Tokyo",
+  "completed": [
+    "Renamed the local project folder from zenray-gpt-realtime-audio to ZenRayDictate",
+    "Added layout-aware local Cmd+Q clearing for the compact composer",
+    "Added a discreet clear button that appears only when text exists",
+    "Added automatic composer focus and fade-out on deactivation",
+    "Built, signed, launched, and visually checked the compact bar"
+  ],
+  "next": "Type text in the live compact composer and verify Cmd+Q, the x button, and fade-out when clicking outside."
+}
