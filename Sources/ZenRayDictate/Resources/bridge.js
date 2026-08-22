@@ -1,6 +1,6 @@
 // Injected into chatgpt.com.
 //
-// Two jobs, nothing more:
+// Three jobs, nothing more:
 //
 // 1. Watch. Listen to the response of POST /backend-api/transcribe, then wait
 //    for ChatGPT to insert it into the composer and hand the WHOLE composer to
@@ -10,7 +10,10 @@
 //    sized to just the capsule instead of the full ChatGPT app around it. This
 //    is pure layout: everything that is not an ancestor of the composer is
 //    hidden, the ancestors are flattened to transparent full width boxes, and
-//    the real composer keeps every one of its own buttons live underneath.
+//    the dictation controls stay live while the unused send button disappears.
+//
+// 3. Adapt. Keep the compact bar aligned with the current macOS light or dark
+//    appearance even when ChatGPT restores a different saved account theme.
 
 (() => {
   if (window.__zrInstalled) return;
@@ -47,12 +50,60 @@
     return full;
   };
 
+  const themeName = (prefersDark) => prefersDark ? 'dark' : 'light';
+
+  const isSendButton = (...metadata) => metadata.some((value) => {
+    const text = normalizeText(value);
+    return !/dictation/i.test(text) &&
+      /(^|[-_\s])(send|submit)([-_\s]|$)/i.test(text);
+  });
+
+  const isDictationStopButton = (...metadata) => metadata.some((value) =>
+    /(^|\s)(stop|submit|finish|end|done)\s+dictation($|\s)/i.test(normalizeText(value))
+  );
+
+  const isIntensityButton = (text) =>
+    /^(low|medium|high|extra high)$/i.test(normalizeText(text));
+
   // Lets the Node regression test exercise the exact production helpers
   // without constructing a fake ChatGPT DOM.
   if (window.__zrTestMode) {
-    window.__zrClipboardTest = { mergeTranscript, resolveClipboardText, cutComposer };
+    window.__zrClipboardTest = {
+      mergeTranscript,
+      resolveClipboardText,
+      cutComposer,
+      themeName,
+      isSendButton,
+      isDictationStopButton,
+      isIntensityButton
+    };
     return;
   }
+
+  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+
+  const applySystemTheme = () => {
+    const theme = themeName(systemTheme.matches);
+    const root = document.documentElement;
+    const dark = theme === 'dark';
+
+    root.classList.toggle('dark', dark);
+    root.classList.toggle('light', !dark);
+    if (root.dataset.theme !== theme) root.dataset.theme = theme;
+    if (root.style.colorScheme !== theme) {
+      root.style.setProperty('color-scheme', theme, 'important');
+    }
+  };
+
+  applySystemTheme();
+  systemTheme.addEventListener('change', applySystemTheme);
+
+  // ChatGPT can restore its saved account theme after the page has loaded.
+  // Keep the root aligned with macOS without touching unrelated classes.
+  new MutationObserver(applySystemTheme).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class', 'data-theme', 'style']
+  });
 
   const findEditor = () =>
     document.querySelector('#prompt-textarea') ||
@@ -212,6 +263,50 @@
     updateClearButton();
   };
 
+  const controlMetadata = (control) => {
+    const nodes = [control, ...control.querySelectorAll('[aria-label], [title], [data-testid]')];
+    return nodes.flatMap((node) => [
+      node.getAttribute('aria-label'),
+      node.getAttribute('title'),
+      node.getAttribute('data-testid')
+    ]);
+  };
+
+  const hideSendButtons = () => {
+    const controls = [...document.querySelectorAll(
+      'button, [role="button"], input[type="submit"], [tabindex="0"]'
+    )].map((control) => ({
+      control,
+      metadata: controlMetadata(control),
+      rect: control.getBoundingClientRect()
+    }));
+
+    controls.forEach(({ control, metadata }) => {
+      if (isSendButton(...metadata)) {
+        control.style.setProperty('display', 'none', 'important');
+      }
+    });
+
+    // During recording ChatGPT can mount an unlabeled orange arrow. The stop
+    // square remains identifiable, so any separate control to its right is
+    // necessarily the unused send action shown in the compact bar.
+    const stop = controls.find(({ metadata }) => isDictationStopButton(...metadata));
+    if (!stop) return;
+    controls.forEach(({ control, rect }) => {
+      if (control !== stop.control && rect.left >= stop.rect.right - 1) {
+        control.style.setProperty('display', 'none', 'important');
+      }
+    });
+  };
+
+  const hideIntensitySelector = (target) => {
+    [...target.querySelectorAll('button, [role="button"]')].forEach((control) => {
+      if (isIntensityButton(control.textContent)) {
+        control.style.setProperty('display', 'none', 'important');
+      }
+    });
+  };
+
   // Applies the hiding/flattening rules to whatever the composer's ancestor
   // chain is RIGHT NOW. Idempotent and cheap, safe to call as often as needed.
   //
@@ -291,6 +386,16 @@
           color: #fff;
           background: rgba(255, 255, 255, 0.24);
         }
+        @media (prefers-color-scheme: light) {
+          #zr-clear {
+            color: rgba(0, 0, 0, 0.62);
+            background: rgba(0, 0, 0, 0.08);
+          }
+          #zr-clear:hover {
+            color: #000;
+            background: rgba(0, 0, 0, 0.16);
+          }
+        }
       `;
       document.head.appendChild(style);
     }
@@ -317,11 +422,16 @@
   };
 
   const compact = () => {
+    // Recording temporarily removes the editor from the DOM, but the send
+    // arrow still exists and must disappear before findTarget can return.
+    hideSendButtons();
     const target = findTarget();
     if (!target) return false;
 
+    applySystemTheme();
     neutralizeChain(target);
     installClearButton();
+    hideIntensitySelector(target);
 
     const reportDebounced = () => {
       clearTimeout(debounceTimer);

@@ -93,7 +93,7 @@ again after the first run; `build.sh` reuses the same identity from then on.
 
 **Using it.** Cmd+D anywhere: the bar appears, dictation starts. Talk. Cmd+D
 again: it stops, and the full composer is on your clipboard — `Cmd+V` to
-paste. When the compact bar is in front, `Ctrl+X` copies the whole composer
+paste. When the compact bar is in front, `Cmd+X` copies the whole composer
 and clears it; `Cmd+Q` clears without copying, and the small `×` button does
 the same. The bar fades away when you click outside it, and Fn still shows or
 hides it independently of dictation.
@@ -110,8 +110,8 @@ hides it independently of dictation.
 - Cmd+D is a system-wide shortcut while this app is running, so it stops
   reaching Cmd+D in other apps (Safari's bookmark shortcut, Finder's
   Duplicate) for as long as ZenRay Dictate is open.
-- Dictation opens in a temporary ChatGPT chat, so nothing is saved to your
-  ChatGPT history.
+- The compact bar follows the current macOS light or dark appearance. It hides
+  ChatGPT's send button and intensity selector because neither is used here.
 - If ChatGPT changes its accessibility labels again, the button matching in
   `bridge.js` may need a small update.
 

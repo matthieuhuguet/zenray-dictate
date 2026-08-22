@@ -112,7 +112,7 @@ final class ChatWindow: NSObject {
     }
 
     func load() {
-        webView.load(URLRequest(url: URL(string: "https://chatgpt.com/?temporary-chat=true")!))
+        webView.load(URLRequest(url: URL(string: "https://chatgpt.com/")!))
     }
 
     // MARK: - Sign in, the one time the full page is needed
@@ -167,7 +167,7 @@ final class ChatWindow: NSObject {
         focusComposerSoon()
     }
 
-    /// Cmd+Q clears the front composer. Ctrl+X copies the whole composer, then
+    /// Cmd+Q clears the front composer. Cmd+X copies the whole composer, then
     /// clears it. Both stay local to the compact window.
     private func installLocalKeyMonitor() {
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -181,7 +181,7 @@ final class ChatWindow: NSObject {
                 self.clearText()
                 return nil
             }
-            if modifiers == .control, character == "x" {
+            if modifiers == .command, character == "x" {
                 self.cutText()
                 return nil
             }
