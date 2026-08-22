@@ -167,9 +167,8 @@ final class ChatWindow: NSObject {
         focusComposerSoon()
     }
 
-    /// Cmd+Q clears only the front compact composer. The event monitor is
-    /// local, so Cmd+Q keeps quitting the app when the bar is not in front and
-    /// remains unchanged in every other application.
+    /// Cmd+Q clears the front composer. Ctrl+X copies the whole composer, then
+    /// clears it. Both stay local to the compact window.
     private func installLocalKeyMonitor() {
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self,
@@ -178,10 +177,15 @@ final class ChatWindow: NSObject {
 
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let character = event.charactersIgnoringModifiers?.lowercased()
-            guard modifiers == .command, character == "q" else { return event }
-
-            self.clearText()
-            return nil
+            if modifiers == .command, character == "q" {
+                self.clearText()
+                return nil
+            }
+            if modifiers == .control, character == "x" {
+                self.cutText()
+                return nil
+            }
+            return event
         }
     }
 
@@ -210,6 +214,31 @@ final class ChatWindow: NSObject {
             }
         }
         focusComposerSoon()
+    }
+
+    private func cutText() {
+        guard isCompact else { return }
+        webView.evaluateJavaScript(
+            "window.__zrCutComposer && window.__zrCutComposer()"
+        ) { [weak self] result, error in
+            if let error {
+                Log.write("cut text failed: \(error.localizedDescription)")
+                return
+            }
+            guard let full = result as? String, !full.isEmpty else { return }
+            self?.copyToClipboard(full, action: "cut")
+            self?.focusComposerSoon()
+        }
+    }
+
+    private func copyToClipboard(_ text: String, action: String = "copied") {
+        let board = NSPasteboard.general
+        board.clearContents()
+        guard board.setString(text, forType: .string) else {
+            Log.write("\(action) text failed: pasteboard rejected the string")
+            return
+        }
+        Log.write("\(action) \(text.count) characters to the clipboard")
     }
 
     private func fadeOut() {
@@ -305,10 +334,7 @@ extension ChatWindow: WKScriptMessageHandler {
         case "transcript":
             let clean = payload.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !clean.isEmpty else { return }
-            let board = NSPasteboard.general
-            board.clearContents()
-            board.setString(clean, forType: .string)
-            Log.write("copied \(clean.count) characters to the clipboard")
+            copyToClipboard(clean)
 
         case "error":
             Log.write("bridge error: \(payload)")

@@ -1,8 +1,8 @@
 # ZenRay Dictate
 
 A tiny macOS menu bar app: **Fn** shows or hides a small ChatGPT window,
-**Cmd+D** starts and stops dictation. When you stop, the transcript is
-already on your clipboard. That's the whole app.
+**Cmd+D** starts and stops dictation. When you stop, the whole composer,
+including text already present before dictation, is on your clipboard.
 
 ![ZenRay Dictate mid-dictation](docs/screenshot.png)
 
@@ -47,8 +47,8 @@ not reimplement ChatGPT's transcription request. It:
    accessibility-label pattern, not a hardcoded string — those labels have
    changed between ChatGPT builds during development).
 3. Watches the response of `POST /backend-api/transcribe`
-   (`{"text": ..., "asset_format": "webm"}`) and copies the text to the
-   clipboard.
+   (`{"text": ..., "asset_format": "webm"}`), waits for ChatGPT to insert it,
+   then copies the whole composer to the clipboard.
 
 No keystrokes are simulated into the page, no request is rebuilt by hand.
 
@@ -92,10 +92,11 @@ again after the first run; `build.sh` reuses the same identity from then on.
    app ever sees it.
 
 **Using it.** Cmd+D anywhere: the bar appears, dictation starts. Talk. Cmd+D
-again: it stops, and the text is on your clipboard — `Cmd+V` to paste. When
-the compact bar is in front, `Cmd+Q` clears its text and returns focus to the
-composer; the small `×` button does the same. The bar fades away when you
-click outside it, and Fn still shows or hides it independently of dictation.
+again: it stops, and the full composer is on your clipboard — `Cmd+V` to
+paste. When the compact bar is in front, `Ctrl+X` copies the whole composer
+and clears it; `Cmd+Q` clears without copying, and the small `×` button does
+the same. The bar fades away when you click outside it, and Fn still shows or
+hides it independently of dictation.
 
 ## Known limitations, help wanted
 

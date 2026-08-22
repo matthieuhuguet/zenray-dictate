@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "\(GlobalHotKey.defaultDescription) starts/stops, ⌘Q clears, Fn shows/hides",
+            title: "\(GlobalHotKey.defaultDescription) starts/stops, ⌃X cuts all, ⌘Q clears, Fn shows/hides",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false

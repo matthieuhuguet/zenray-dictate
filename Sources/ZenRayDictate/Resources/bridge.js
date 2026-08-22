@@ -2,11 +2,9 @@
 //
 // Two jobs, nothing more:
 //
-// 1. Watch. Listen to the response of POST /backend-api/transcribe, whose body
-//    is {"text": "...", "asset_format": "webm"}, and hand the text to Swift so
-//    it can be copied to the clipboard. No button is ever clicked by this
-//    script, no button label is ever matched: you click Start Dictation and
-//    Stop Dictation yourself, on the real page.
+// 1. Watch. Listen to the response of POST /backend-api/transcribe, then wait
+//    for ChatGPT to insert it into the composer and hand the WHOLE composer to
+//    Swift. Copying the response alone loses text that was already present.
 //
 // 2. Trim. Strip the page down to the composer bar alone, so the window can be
 //    sized to just the capsule instead of the full ChatGPT app around it. This
@@ -24,18 +22,100 @@
     } catch (e) {}
   };
 
+  const normalizeText = (value) => String(value || '').trim();
+
+  const mergeTranscript = (before, transcript) => {
+    const base = normalizeText(before);
+    const addition = normalizeText(transcript);
+    if (!base) return addition;
+    if (!addition) return base;
+    return `${base} ${addition}`;
+  };
+
+  // Prefer the real composer once React has updated it. The merge is only a
+  // timeout fallback for a ChatGPT build that applies the response too late.
+  const resolveClipboardText = (before, transcript, current) => {
+    const base = normalizeText(before);
+    const full = normalizeText(current);
+    return full && full !== base ? full : mergeTranscript(base, transcript);
+  };
+
+  const cutComposer = (readText, clear) => {
+    const full = normalizeText(readText());
+    if (!full) return '';
+    clear();
+    return full;
+  };
+
+  // Lets the Node regression test exercise the exact production helpers
+  // without constructing a fake ChatGPT DOM.
+  if (window.__zrTestMode) {
+    window.__zrClipboardTest = { mergeTranscript, resolveClipboardText, cutComposer };
+    return;
+  }
+
+  const findEditor = () =>
+    document.querySelector('#prompt-textarea') ||
+    document.querySelector('div[contenteditable="true"]') ||
+    document.querySelector('textarea');
+
+  const editorText = (editor) => {
+    if (!editor) return '';
+    if ('value' in editor) return editor.value || '';
+    return editor.textContent || '';
+  };
+
+  let transcriptCopySerial = 0;
+
+  const copyFullComposerAfterTranscript = (before, transcript) => {
+    const serial = ++transcriptCopySerial;
+    let attempts = 0;
+    let last = '';
+    let stableSamples = 0;
+
+    const check = () => {
+      if (serial !== transcriptCopySerial) return;
+
+      const current = normalizeText(editorText(findEditor()));
+      if (current && current !== normalizeText(before)) {
+        if (current === last) stableSamples += 1;
+        else {
+          last = current;
+          stableSamples = 0;
+        }
+
+        // Three equal samples, 80 ms apart, avoid copying a half-inserted DOM.
+        if (stableSamples >= 2) {
+          send('transcript', current);
+          return;
+        }
+      }
+
+      attempts += 1;
+      if (attempts < 38) {
+        setTimeout(check, 80);
+        return;
+      }
+
+      send('transcript', resolveClipboardText(before, transcript, current));
+    };
+
+    setTimeout(check, 80);
+  };
+
   // --- 1. watch the transcription response -----------------------------------
 
   const originalFetch = window.fetch;
   window.fetch = function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const composerBefore = editorText(findEditor());
     const promise = originalFetch.apply(this, arguments);
     if (/\/backend-api\/transcribe/.test(url)) {
       promise
         .then(async (res) => {
           try {
             const data = await res.clone().json();
-            send('transcript', (data && data.text) || '');
+            copyFullComposerAfterTranscript(composerBefore, (data && data.text) || '');
           } catch (e) {
             send('error', 'Unreadable response from ChatGPT.');
           }
@@ -55,17 +135,6 @@
       document.querySelector('div[contenteditable="true"]');
     if (!anchor) return null;
     return anchor.closest('form') || anchor.parentElement;
-  };
-
-  const findEditor = () =>
-    document.querySelector('#prompt-textarea') ||
-    document.querySelector('div[contenteditable="true"]') ||
-    document.querySelector('textarea');
-
-  const editorText = (editor) => {
-    if (!editor) return '';
-    if ('value' in editor) return editor.value || '';
-    return editor.textContent || '';
   };
 
   const updateClearButton = () => {
@@ -112,6 +181,11 @@
     updateClearButton();
     return true;
   };
+
+  const cutEditor = () => cutComposer(
+    () => editorText(findEditor()),
+    clearEditor
+  );
 
   const installClearButton = () => {
     let button = document.getElementById('zr-clear');
@@ -270,6 +344,7 @@
   window.__zrCompact = compact;
   window.__zrFocusComposer = focusEditor;
   window.__zrClearComposer = clearEditor;
+  window.__zrCutComposer = cutEditor;
 
   // React swaps the composer's DOM subtree between the idle and recording
   // states (see neutralizeChain's comment), so styling once at page load is
