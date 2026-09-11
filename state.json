@@ -1,7 +1,7 @@
 {
   "task": "Use the native Codex composer for ZenRayDictate dictation",
   "status": "complete",
-  "updated_at": "2026-09-11 10:24 Europe/Paris",
+  "updated_at": "2026-09-11 11:37 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
     "Removed the web transcription endpoint and browser recording retry layer",
@@ -11,7 +11,8 @@
     "Rebuilt and signed the app with the stable ZenRayDictate Local identity",
     "Verified the native empty-stop path leaves the existing clipboard unchanged",
     "Verified the native composer copy path returns the complete composer text",
-    "Verified the release binary links no WebKit framework and bundles no bridge or web asset"
+    "Verified the release binary links no WebKit framework and bundles no bridge or web asset",
+    "Made the helper open and activate the native Codex window on every launch"
   ],
   "next": "Speak a short phrase in Codex, press Cmd+D to stop, and paste the copied composer text."
 }
