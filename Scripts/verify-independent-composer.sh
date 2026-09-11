@@ -34,13 +34,15 @@ grep -q 'buildMainMenu' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'Paste into composer' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'toggleVisibility' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'private final class CircularButton' Sources/ZenRayDictate/ComposerWindowController.swift
-grep -q 'layer.cornerCurve = .circular' Sources/ZenRayDictate/ComposerWindowController.swift
-grep -q 'layer.masksToBounds = true' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'circleFillColor' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'NSBezierPath(ovalIn: circleRect)' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'imageScaling = .scaleProportionallyDown' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'cancelButton.widthAnchor.constraint(equalTo: cancelButton.heightAnchor)' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'primaryButton.widthAnchor.constraint(equalTo: primaryButton.heightAnchor)' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'NSScreen.visibleFrame' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'bottomInset' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'windowHeight: CGFloat = 140' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'buttonSize: CGFloat = 36' Sources/ZenRayDictate/ComposerWindowController.swift
 if grep -q 'liveTranscript' Sources/ZenRayDictate/ComposerWindowController.swift; then
     echo "live transcript UI must stay removed" >&2
     exit 1

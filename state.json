@@ -1,7 +1,7 @@
 {
   "task": "Keep the independent composer fixed while restoring complete text input and clipboard controls",
   "status": "complete",
-  "updated_at": "2026-09-11 17:02 Europe/Paris",
+  "updated_at": "2026-09-11 17:10 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
     "Removed the web transcription endpoint and browser recording retry layer",
@@ -17,7 +17,7 @@
     "Added Control+D start and stop and Control+Q cancellation",
     "Saved every recording before transcription and restored pending recordings after relaunch",
     "Used the Codex transcription endpoint with a local Whisper fallback",
-    "Verified the independent window at 860 by 360 points with accessible Start, Stop, Cancel, and Retry controls",
+    "Verified the independent window at 860 by 140 points with accessible Start, Stop, Cancel, and Retry controls",
     "Verified Control+D start and stop, Codex insertion, Control+Q cancellation, and durable retry after relaunch",
     "Restored fade out after focus loss and pressing Fn, using the former control behavior",
     "Locked the composer frame and verified long prompt text wraps inside the editor",
@@ -30,7 +30,7 @@
     "Verified a long unbroken prompt at 860 by 360 points with one remaining static text control",
     "Verified a real paste action inserted 22 characters and a real Codex retry inserted 138 characters then copied 140 characters",
     "Positioned the composer at the bottom center of NSScreen.visibleFrame with a 24 point bottom inset",
-    "Made both action button bounds square and recalculated their circular layers after layout"
+    "Made both action buttons 38 by 38 points at runtime and drew their circular backgrounds explicitly inside square bounds"
   ],
   "next": "Use the independent composer normally while keeping the Codex chat open separately."
 }

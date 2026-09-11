@@ -147,17 +147,19 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
 
 private enum ComposerTokens {
     static let windowWidth: CGFloat = 860
-    static let windowHeight: CGFloat = 360
+    static let windowHeight: CGFloat = 140
     static let windowSize = NSSize(width: windowWidth, height: windowHeight)
     static let bottomInset: CGFloat = 24
     static let fadeDuration: TimeInterval = 0.16
     static let cardRadius: CGFloat = 24
-    static let contentInset: CGFloat = 24
-    static let editorFontSize: CGFloat = 21
-    static let iconPointSize: CGFloat = 17
-    static let buttonSize: CGFloat = 48
+    static let contentInset: CGFloat = 18
+    static let editorFontSize: CGFloat = 20
+    static let iconPointSize: CGFloat = 15
+    static let buttonSize: CGFloat = 36
     static let waveformBars = 56
     static let waveformWidth: CGFloat = 4
+    static let primaryButtonFill = NSColor(calibratedWhite: 0.12, alpha: 1)
+    static let secondaryButtonFill = NSColor.quaternaryLabelColor.withAlphaComponent(0.18)
 }
 
 private enum ComposerState: Equatable {
@@ -168,13 +170,21 @@ private enum ComposerState: Equatable {
 }
 
 private final class CircularButton: NSButton {
-    override func layout() {
-        super.layout()
-        guard let layer else { return }
-        let diameter = min(bounds.width, bounds.height)
-        layer.cornerRadius = diameter / 2
-        layer.cornerCurve = .circular
-        layer.masksToBounds = true
+    var circleFillColor = NSColor.clear {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let diameter = floor(min(bounds.width, bounds.height))
+        let circleRect = NSRect(
+            x: floor((bounds.width - diameter) / 2) + 0.5,
+            y: floor((bounds.height - diameter) / 2) + 0.5,
+            width: max(0, diameter - 1),
+            height: max(0, diameter - 1)
+        )
+        circleFillColor.setFill()
+        NSBezierPath(ovalIn: circleRect).fill()
+        super.draw(dirtyRect)
     }
 }
 
@@ -189,8 +199,8 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     private let placeholder = NSTextField(labelWithString: "Ask anything")
     private let waveform = WaveformView()
     private let stateLabel = NSTextField(labelWithString: "Ready")
-    private let primaryButton = NSButton()
-    private let cancelButton = NSButton()
+    private let primaryButton = CircularButton()
+    private let cancelButton = CircularButton()
     private let progress = NSProgressIndicator()
     private var state: ComposerState = .idle
     private var lastClipboardText: String?
@@ -371,9 +381,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         configureButton(cancelButton, symbol: "xmark", accessibility: "Cancel recording", action: #selector(cancelPressed))
         configureButton(primaryButton, symbol: "mic.fill", accessibility: "Start dictation", action: #selector(primaryPressed))
         primaryButton.contentTintColor = .white
-        primaryButton.wantsLayer = true
-        primaryButton.layer?.backgroundColor = NSColor.labelColor.cgColor
-        primaryButton.layer?.cornerRadius = ComposerTokens.buttonSize / 2
+        primaryButton.circleFillColor = ComposerTokens.primaryButtonFill
 
         progress.controlSize = .small
         progress.style = .spinning
@@ -464,11 +472,9 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         button.toolTip = accessibility
         button.target = self
         button.action = action
-        button.wantsLayer = true
-        button.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.18).cgColor
-        button.layer?.cornerRadius = ComposerTokens.buttonSize / 2
-        button.layer?.cornerCurve = .circular
-        button.layer?.masksToBounds = true
+        if let circularButton = button as? CircularButton {
+            circularButton.circleFillColor = ComposerTokens.secondaryButtonFill
+        }
     }
 
     private func startDictation() {
