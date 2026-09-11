@@ -34,7 +34,7 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         window.setContentSize(ComposerTokens.windowSize)
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.center()
+        positionAtBottomCenter(window)
         enforceFixedFrame(window)
     }
 
@@ -44,6 +44,7 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         guard let window else { return }
         fadeSerial += 1
         enforceFixedFrame(window)
+        positionAtBottomCenter(window)
         window.alphaValue = 1
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -127,16 +128,33 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         window.setFrame(frame, display: true)
         Log.write("composer frame restored to 860x360 after content resize")
     }
+
+    private func positionAtBottomCenter(_ window: NSWindow) {
+        guard let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let visibleFrame = screen.visibleFrame
+        let origin = NSPoint(
+            x: visibleFrame.midX - window.frame.width / 2,
+            y: visibleFrame.minY + ComposerTokens.bottomInset
+        )
+        window.setFrameOrigin(origin)
+        Log.write(
+            "composer positioned bottom center: source=NSScreen.visibleFrame, "
+                + "origin=\(Int(origin.x))x\(Int(origin.y)), "
+                + "bottomInset=\(Int(ComposerTokens.bottomInset))pt"
+        )
+    }
 }
 
 private enum ComposerTokens {
     static let windowWidth: CGFloat = 860
     static let windowHeight: CGFloat = 360
     static let windowSize = NSSize(width: windowWidth, height: windowHeight)
+    static let bottomInset: CGFloat = 24
     static let fadeDuration: TimeInterval = 0.16
     static let cardRadius: CGFloat = 24
     static let contentInset: CGFloat = 24
     static let editorFontSize: CGFloat = 21
+    static let iconPointSize: CGFloat = 17
     static let buttonSize: CGFloat = 48
     static let waveformBars = 56
     static let waveformWidth: CGFloat = 4
@@ -433,8 +451,12 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
 
     private func configureButton(_ button: NSButton, symbol: String, accessibility: String, action: Selector) {
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: accessibility)
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: accessibility)
+        button.image = image?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: ComposerTokens.iconPointSize, weight: .medium)
+        )
         button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
         button.isBordered = false
         button.bezelStyle = .regularSquare
         button.setButtonType(.momentaryPushIn)

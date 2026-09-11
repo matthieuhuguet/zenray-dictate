@@ -20,7 +20,7 @@ If the Codex request fails, the installed local Whisper MLX engine is tried. If 
 - The circular retry button retries the last saved recording.
 - The menu bar item can show, copy, paste, clear, or retry the composer and its last copy.
 
-The composer keeps a fixed `860 x 360` point frame. Long prompt text wraps inside the editor and scrolls there instead of resizing the window.
+The composer keeps a fixed `860 x 360` point frame and opens at the bottom center of the active screen, above the Dock area. Long prompt text wraps inside the editor and scrolls there instead of resizing the window.
 
 The UI and flow are an independent reimplementation based on the visible Codex composer behavior. No Codex or ChatGPT source code is bundled.
 
