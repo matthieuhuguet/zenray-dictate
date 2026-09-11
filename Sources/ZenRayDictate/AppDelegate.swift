@@ -13,12 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LoginItem.enable()
         AudioInput.startKeepingPreferred()
         _ = codex
+        codex.show()
 
         // Cmd+D drives the native Codex dictation control.
         hotKey.onPress = { [weak self] in self?.codex.toggleDictation() }
         hotKey.register()
 
-        // Fn is a separate, simpler gesture: just show or hide the window.
+        // Fn is a separate, simpler gesture: just show or hide Codex.
         fnKey.onPress = { [weak self] in self?.codex.toggle() }
         let fnStarted = fnKey.start()
         Log.write("accessibility trusted: \(Permissions.accessibility), Fn tap started: \(fnStarted)")
