@@ -38,9 +38,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key>   <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>ZenRay Dictate records your voice to transcribe it in the independent composer.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>ZenRay Dictate uses speech recognition to show a live preview while you dictate.</string>
-
     <!-- Regular app: the Dock icon keeps the independent composer easy to reopen. -->
 
 </dict>

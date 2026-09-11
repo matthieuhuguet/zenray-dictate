@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import Speech
 
 // Iteration timestamp: 2026-09-11.
 final class AudioCapture: NSObject {
@@ -23,16 +22,12 @@ final class AudioCapture: NSObject {
     }
 
     var onLevel: ((Float) -> Void)?
-    var onLiveText: ((String) -> Void)?
     var onDuration: ((TimeInterval) -> Void)?
 
     private let fileManager = FileManager.default
     private let captureDirectory: URL
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
-    private var speechRecognizer: SFSpeechRecognizer?
-    private var speechRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var speechTask: SFSpeechRecognitionTask?
     private var meterTimer: Timer?
     private var startedAt: Date?
     private(set) var currentURL: URL?
@@ -75,11 +70,6 @@ final class AudioCapture: NSObject {
         ]
         let file = try AVAudioFile(forWriting: url, settings: settings)
 
-        let speechRequest = SFSpeechAudioBufferRecognitionRequest()
-        speechRequest.shouldReportPartialResults = true
-        speechRequest.taskHint = .dictation
-        speechRequest.requiresOnDeviceRecognition = false
-
         inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             do {
@@ -87,7 +77,6 @@ final class AudioCapture: NSObject {
             } catch {
                 Log.write("audio capture write failed: \(error.localizedDescription)")
             }
-            speechRequest.append(buffer)
             let level = self.level(from: buffer)
             DispatchQueue.main.async { [weak self] in
                 self?.onLevel?(level)
@@ -96,7 +85,6 @@ final class AudioCapture: NSObject {
 
         audioEngine = input
         audioFile = file
-        self.speechRequest = speechRequest
         currentURL = url
         startedAt = Date()
 
@@ -117,29 +105,14 @@ final class AudioCapture: NSObject {
         return url
     }
 
-    func startLivePreview() {
-        guard let request = speechRequest else { return }
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else {
-            Log.write("live speech preview skipped: speech recognition permission is missing")
-            return
-        }
-        guard speechTask == nil else { return }
-        startSpeechRecognition(with: request)
-    }
-
     func stop() -> URL? {
         guard let engine = audioEngine, let url = currentURL else { return nil }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        speechRequest?.endAudio()
-        speechTask?.finish()
         meterTimer?.invalidate()
         meterTimer = nil
         audioFile = nil
         audioEngine = nil
-        speechRequest = nil
-        speechTask = nil
-        speechRecognizer = nil
         startedAt = nil
         currentURL = nil
 
@@ -158,35 +131,11 @@ final class AudioCapture: NSObject {
         Log.write("independent audio capture cancelled")
     }
 
-    private func startSpeechRecognition(with request: SFSpeechAudioBufferRecognitionRequest) {
-        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "fr-FR"))
-        speechRecognizer = recognizer
-        guard let recognizer, recognizer.isAvailable else {
-            Log.write("live speech preview unavailable")
-            return
-        }
-
-        speechTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            if let result {
-                let text = result.bestTranscription.formattedString
-                DispatchQueue.main.async { [weak self] in self?.onLiveText?(text) }
-            }
-            if let error {
-                Log.write("live speech preview stopped: \(error.localizedDescription)")
-            }
-        }
-    }
-
     private func cleanupCapture() {
         meterTimer?.invalidate()
         meterTimer = nil
-        speechRequest?.endAudio()
-        speechTask?.cancel()
         audioFile = nil
         audioEngine = nil
-        speechRequest = nil
-        speechTask = nil
-        speechRecognizer = nil
         startedAt = nil
         currentURL = nil
     }

@@ -9,8 +9,7 @@ let package = Package(
             name: "ZenRayDictate",
             path: "Sources/ZenRayDictate",
             linkerSettings: [
-                .linkedFramework("AVFoundation"),
-                .linkedFramework("Speech")
+                .linkedFramework("AVFoundation")
             ]
         )
     ]

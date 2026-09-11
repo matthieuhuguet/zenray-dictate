@@ -7,11 +7,9 @@ cd "$(dirname "$0")/.."
 ./build.sh >/dev/null
 
 test "$(plutil -extract NSMicrophoneUsageDescription raw ZenRayDictate.app/Contents/Info.plist)" != ""
-test "$(plutil -extract NSSpeechRecognitionUsageDescription raw ZenRayDictate.app/Contents/Info.plist)" != ""
 codesign --verify --deep --strict ZenRayDictate.app
 codesign --display --entitlements :- ZenRayDictate.app 2>/dev/null | grep -q 'com.apple.security.device.audio-input'
 otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'AVFoundation.framework'
-otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'Speech.framework'
 if otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'WebKit.framework'; then
     echo "WebKit must not be linked" >&2
     exit 1
@@ -30,6 +28,14 @@ grep -q 'addLocalMonitorForEvents' Sources/ZenRayDictate/ComposerWindowControlle
 grep -q 'cutComposerText' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'character == "q"' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'character == "x"' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'pasteAsPlainText' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'buildMainMenu' Sources/ZenRayDictate/AppDelegate.swift
+grep -q 'Paste into composer' Sources/ZenRayDictate/AppDelegate.swift
+grep -q 'toggleVisibility' Sources/ZenRayDictate/ComposerWindowController.swift
+if grep -q 'liveTranscript' Sources/ZenRayDictate/ComposerWindowController.swift; then
+    echo "live transcript UI must stay removed" >&2
+    exit 1
+fi
 if grep -q '\.resizable' Sources/ZenRayDictate/ComposerWindowController.swift; then
     echo "composer window must stay fixed" >&2
     exit 1

@@ -1,7 +1,7 @@
 {
-  "task": "Restore the former composer controls in the independent ZenRayDictate app",
+  "task": "Keep the independent composer fixed while restoring complete text input and clipboard controls",
   "status": "complete",
-  "updated_at": "2026-09-11 13:05 Europe/Paris",
+  "updated_at": "2026-09-11 13:31 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
     "Removed the web transcription endpoint and browser recording retry layer",
@@ -21,7 +21,14 @@
     "Verified Control+D start and stop, Codex insertion, Control+Q cancellation, and durable retry after relaunch",
     "Restored fade out after focus loss and pressing Fn, using the former control behavior",
     "Locked the composer frame and verified long prompt text wraps inside the editor",
-    "Restored Command+Q clear and Command+X copy-then-clear controls"
+    "Restored Command+Q clear and Command+X copy-then-clear controls",
+    "Removed the live transcript field and Speech framework so only one text zone remains",
+    "Forced the editor document and text container to the fixed viewport width, including unbroken text",
+    "Restored Command+C and Command+V plain-text editing plus a Paste into composer menu action",
+    "Restored Fn show or hide behavior and made the x button clear idle text or cancel recording",
+    "Copied every successful transcription automatically and kept the last copy in memory for retry",
+    "Verified a long unbroken prompt at 860 by 360 points with one remaining static text control",
+    "Verified a real paste action inserted 22 characters and a real Codex retry inserted 138 characters then copied 140 characters"
   ],
   "next": "Use the independent composer normally while keeping the Codex chat open separately."
 }

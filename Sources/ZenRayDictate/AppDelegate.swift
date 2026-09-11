@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 
+// Iteration timestamp: 2026-09-11.
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let composer = ComposerWindowController(window: nil)
@@ -19,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("launched")
+        buildMainMenu()
         buildStatusItem()
         LoginItem.enable()
         composer.show()
@@ -30,10 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         fnKey.onPress = { [weak self] in
             Log.write("Fn press received")
-            self?.composer.fadeOut(reason: "Fn")
+            self?.composer.toggleVisibility()
         }
         let fnStarted = fnKey.start()
-        Log.write("Fn fade-out monitor started: \(fnStarted)")
+        Log.write("Fn visibility monitor started: \(fnStarted)")
         if !fnStarted {
             FnKeyMonitor.requestTrust()
             Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
@@ -43,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 guard self.fnKey.start() else { return }
                 timer.invalidate()
-                Log.write("Fn fade-out monitor started after Accessibility grant")
+                Log.write("Fn visibility monitor started after Accessibility grant")
             }
         }
 
@@ -58,11 +60,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = buildMenu()
     }
 
+    private func buildMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "ZenRayDictate")
+        appMenu.addItem(withTitle: "About ZenRayDictate", action: nil, keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(
+            withTitle: "Quit ZenRayDictate",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        NSApp.mainMenu = mainMenu
+    }
+
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "⌃D starts/stops, ⌃Q cancels, ⌘X cuts all, ⌘Q clears, Fn fades out",
+            title: "⌃D starts/stops, ⌃Q cancels, ⌘X cuts all, ⌘Q clears, Fn shows/hides",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
@@ -72,6 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(menu, "Show composer", #selector(showComposer))
         add(menu, "Retry last recording", #selector(retryRecording))
         add(menu, "Copy composer text", #selector(copyComposer))
+        add(menu, "Paste into composer", #selector(pasteComposer))
+        add(menu, "Retry last copy", #selector(retryCopy))
         add(menu, "Clear composer", #selector(clearComposer))
         menu.addItem(.separator())
 
@@ -94,6 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showComposer() { composer.show() }
     @objc private func clearComposer() { composer.clearComposer() }
     @objc private func copyComposer() { composer.copyComposerText() }
+    @objc private func pasteComposer() { composer.pasteComposerText() }
+    @objc private func retryCopy() { composer.retryLastCopy() }
     @objc private func retryRecording() { composer.retryPendingRecording() }
 
     @objc private func toggleLoginItem() {

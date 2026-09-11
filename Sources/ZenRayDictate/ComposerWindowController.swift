@@ -1,7 +1,6 @@
 import AppKit
 import AVFoundation
 import QuartzCore
-import Speech
 
 // Iteration timestamp: 2026-09-11.
 final class ComposerWindowController: NSWindowController, NSWindowDelegate {
@@ -36,6 +35,7 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.center()
+        enforceFixedFrame(window)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -43,10 +43,20 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
     func show() {
         guard let window else { return }
         fadeSerial += 1
+        enforceFixedFrame(window)
         window.alphaValue = 1
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         composer.focusEditor()
+    }
+
+    func toggleVisibility() {
+        guard let window else { return }
+        if window.isVisible && window.alphaValue > 0.99 {
+            fadeOut(reason: "Fn")
+        } else {
+            show()
+        }
     }
 
     func fadeOut(reason: String = "focus loss") {
@@ -73,7 +83,15 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
     func cancelRecording() { composer.cancelRecording() }
     func retryPendingRecording() { composer.retryPendingRecording() }
     func copyComposerText() { composer.copyComposerText() }
-    func clearComposer() { composer.clearComposer() }
+    func pasteComposerText() {
+        show()
+        composer.pasteComposerText()
+    }
+    func retryLastCopy() { composer.retryLastCopy() }
+    func clearComposer() {
+        show()
+        composer.clearComposer()
+    }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
@@ -85,6 +103,29 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
             guard let self, let window = self.window, !window.isKeyWindow else { return }
             self.fadeOut(reason: "window lost key")
         }
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        sender.frameRect(forContentRect: NSRect(origin: .zero, size: ComposerTokens.windowSize)).size
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let window else { return }
+        enforceFixedFrame(window)
+    }
+
+    private func enforceFixedFrame(_ window: NSWindow) {
+        let contentRect = window.contentRect(forFrameRect: window.frame)
+        let widthDelta = abs(contentRect.width - ComposerTokens.windowWidth)
+        let heightDelta = abs(contentRect.height - ComposerTokens.windowHeight)
+        guard widthDelta > 0.5 || heightDelta > 0.5 else { return }
+
+        var frame = window.frame
+        frame.size = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: ComposerTokens.windowSize)
+        ).size
+        window.setFrame(frame, display: true)
+        Log.write("composer frame restored to 860x360 after content resize")
     }
 }
 
@@ -114,17 +155,16 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     private let transcriber = TranscriptionPipeline()
     private let pending = PendingRecordingStore()
     private let card = ComposerCardView()
-    private let editor = NSTextView()
-    private let editorScroll = NSScrollView()
+    private let editor = ComposerTextView()
+    private let editorScroll = ComposerEditorScrollView()
     private let placeholder = NSTextField(labelWithString: "Ask anything")
     private let waveform = WaveformView()
-    private let liveTranscript = NSTextField(labelWithString: "")
     private let stateLabel = NSTextField(labelWithString: "Ready")
     private let primaryButton = NSButton()
     private let cancelButton = NSButton()
     private let progress = NSProgressIndicator()
     private var state: ComposerState = .idle
-    private var liveText = ""
+    private var lastClipboardText: String?
     private var localKeyMonitor: Any?
 
     override func loadView() { view = card }
@@ -134,7 +174,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         configureInterface()
         installLocalKeyMonitor()
         capture.onLevel = { [weak self] level in self?.waveform.add(level: CGFloat(level)) }
-        capture.onLiveText = { [weak self] text in self?.setLiveTranscript(text) }
         capture.onDuration = { [weak self] duration in self?.updateDuration(duration) }
         if let saved = pending.existingURL() {
             state = .failed("A recording is ready to retry")
@@ -173,8 +212,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     func cancelRecording() {
         guard state == .recording else { return }
         capture.cancel()
-        liveText = ""
-        liveTranscript.stringValue = ""
         waveform.reset()
         state = .idle
         updateActionButton()
@@ -196,19 +233,47 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     func copyComposerText() {
         let text = editor.string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        lastClipboardText = text
+        guard writeClipboard(text) else {
+            stateLabel.stringValue = "Copy failed, retry available"
+            Log.write("copy independent composer text failed: retry is available")
+            return
+        }
         stateLabel.stringValue = "Copied"
         Log.write("copied independent composer text: \(text.count) characters")
+    }
+
+    func retryLastCopy() {
+        guard let text = lastClipboardText, !text.isEmpty else {
+            stateLabel.stringValue = "Nothing to copy"
+            Log.write("retry copy ignored: no composer text in memory")
+            return
+        }
+        guard writeClipboard(text) else {
+            stateLabel.stringValue = "Copy failed, retry available"
+            Log.write("retry independent composer text failed")
+            return
+        }
+        stateLabel.stringValue = "Copied"
+        Log.write("retried independent composer copy: \(text.count) characters")
+    }
+
+    func pasteComposerText() {
+        guard state != .recording else { return }
+        focusEditor()
+        editor.paste(nil)
+        editorDidChange(editor)
+        Log.write("pasted text into independent composer")
     }
 
     func cutComposerText() {
         guard state != .recording else { return }
         let text = editor.string
         guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        guard NSPasteboard.general.setString(text, forType: .string) else {
+        lastClipboardText = text
+        guard writeClipboard(text) else {
             Log.write("cut independent composer text failed: pasteboard rejected the string")
+            stateLabel.stringValue = "Copy failed, retry available"
             return
         }
         editor.string = ""
@@ -216,6 +281,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         state = .idle
         stateLabel.stringValue = "Ready"
         updateActionButton()
+        focusEditor()
         Log.write("cut independent composer text: \(text.count) characters")
     }
 
@@ -226,6 +292,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         state = .idle
         stateLabel.stringValue = "Ready"
         updateActionButton()
+        focusEditor()
     }
 
     private func configureInterface() {
@@ -251,6 +318,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         editor.textColor = .labelColor
         editor.insertionPointColor = .labelColor
         editor.textContainerInset = NSSize(width: 0, height: 6)
+        editor.textContainer?.lineBreakMode = .byCharWrapping
         editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         editor.delegate = self
@@ -265,12 +333,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
 
         waveform.translatesAutoresizingMaskIntoConstraints = false
         waveform.isActive = false
-
-        liveTranscript.translatesAutoresizingMaskIntoConstraints = false
-        liveTranscript.font = NSFont.systemFont(ofSize: 12)
-        liveTranscript.textColor = .secondaryLabelColor
-        liveTranscript.lineBreakMode = .byTruncatingTail
-        liveTranscript.maximumNumberOfLines = 1
 
         stateLabel.translatesAutoresizingMaskIntoConstraints = false
         stateLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
@@ -293,7 +355,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         card.addSubview(placeholder)
         card.addSubview(cancelButton)
         card.addSubview(waveform)
-        card.addSubview(liveTranscript)
         card.addSubview(stateLabel)
         card.addSubview(primaryButton)
         card.addSubview(progress)
@@ -317,11 +378,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             waveform.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -ComposerTokens.contentInset - 5),
             waveform.heightAnchor.constraint(equalToConstant: 32),
 
-            liveTranscript.leadingAnchor.constraint(equalTo: waveform.leadingAnchor),
-            liveTranscript.trailingAnchor.constraint(equalTo: waveform.trailingAnchor),
-            liveTranscript.bottomAnchor.constraint(equalTo: waveform.topAnchor, constant: -2),
-            liveTranscript.heightAnchor.constraint(equalToConstant: 18),
-
             stateLabel.leadingAnchor.constraint(equalTo: waveform.leadingAnchor),
             stateLabel.trailingAnchor.constraint(equalTo: waveform.trailingAnchor),
             stateLabel.topAnchor.constraint(equalTo: waveform.bottomAnchor, constant: 4),
@@ -337,6 +393,11 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         ])
         updatePlaceholder()
         updateActionButton()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        editorScroll.fitDocumentViewToViewport()
     }
 
     private func installLocalKeyMonitor() {
@@ -382,17 +443,14 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
                 self.updateActionButton()
                 return
             }
-            self.requestSpeechAccess { [weak self] _ in self?.beginCapture() }
+            self.beginCapture()
         }
     }
 
     private func beginCapture() {
         do {
             _ = try capture.start()
-            capture.startLivePreview()
             state = .recording
-            liveText = ""
-            liveTranscript.stringValue = ""
             waveform.reset()
             waveform.isActive = true
             stateLabel.stringValue = "Listening"
@@ -414,7 +472,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             return
         }
         waveform.isActive = false
-        liveTranscript.stringValue = ""
         state = .transcribing
         stateLabel.stringValue = "Transcribing"
         progress.startAnimation(nil)
@@ -455,14 +512,19 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         let separator = current.isEmpty || current.hasSuffix(" ") || current.hasSuffix("\n") ? "" : " "
         editor.string = current + separator + result.text
         editorDidChange(editor)
+        let copied = writeClipboard(editor.string)
+        lastClipboardText = editor.string
         pending.clear()
         state = .idle
-        stateLabel.stringValue = result.provider
+        stateLabel.stringValue = copied ? "Copied" : "Copy failed, retry available"
         progress.stopAnimation(nil)
         waveform.reset()
         updateActionButton()
         focusEditor()
         Log.write("independent transcription inserted: provider=\(result.provider), characters=\(result.text.count)")
+        Log.write(copied
+            ? "independent transcription copied to clipboard: characters=\(editor.string.count)"
+            : "independent transcription clipboard copy failed: retry is available")
     }
 
     private func failTranscription(_ error: Error) {
@@ -486,25 +548,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         }
     }
 
-    private func requestSpeechAccess(completion: @escaping (Bool) -> Void) {
-        switch SFSpeechRecognizer.authorizationStatus() {
-        case .authorized:
-            completion(true)
-        case .notDetermined:
-            SFSpeechRecognizer.requestAuthorization { status in
-                DispatchQueue.main.async { completion(status == .authorized) }
-            }
-        default:
-            completion(false)
-        }
-    }
-
-    private func setLiveTranscript(_ text: String) {
-        guard state == .recording else { return }
-        liveText = text
-        liveTranscript.stringValue = text.isEmpty ? "" : text
-    }
-
     private func updateDuration(_ duration: TimeInterval) {
         guard state == .recording else { return }
         let seconds = Int(duration.rounded(.down))
@@ -516,29 +559,49 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
 
     private func updatePlaceholder() { placeholder.isHidden = !editor.string.isEmpty }
 
+    @discardableResult
+    private func writeClipboard(_ text: String) -> Bool {
+        NSPasteboard.general.clearContents()
+        return NSPasteboard.general.setString(text, forType: .string)
+    }
+
     private func updateActionButton() {
         switch state {
         case .idle:
             primaryButton.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Start dictation")
             primaryButton.toolTip = "Start dictation"
+            cancelButton.toolTip = "Clear text"
+            cancelButton.setAccessibilityLabel("Clear text")
             primaryButton.isEnabled = true
             progress.stopAnimation(nil)
         case .recording:
             primaryButton.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: "Stop dictation")
             primaryButton.toolTip = "Stop dictation"
+            cancelButton.toolTip = "Cancel recording"
+            cancelButton.setAccessibilityLabel("Cancel recording")
             primaryButton.isEnabled = true
         case .transcribing:
             primaryButton.image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "Transcribing")
             primaryButton.toolTip = "Transcribing"
+            cancelButton.toolTip = "Clear text"
+            cancelButton.setAccessibilityLabel("Clear text")
             primaryButton.isEnabled = false
         case .failed:
             primaryButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Retry transcription")
             primaryButton.toolTip = "Retry transcription"
+            cancelButton.toolTip = "Clear text"
+            cancelButton.setAccessibilityLabel("Clear text")
             primaryButton.isEnabled = true
         }
     }
 
-    @objc private func cancelPressed() { cancelRecording() }
+    @objc private func cancelPressed() {
+        if state == .recording {
+            cancelRecording()
+        } else {
+            clearComposer()
+        }
+    }
 
     @objc private func primaryPressed() {
         switch state {
@@ -552,6 +615,87 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     func textViewDidChangeSelection(_ notification: Notification) { updatePlaceholder() }
     func textDidChange(_ notification: Notification) { updatePlaceholder() }
     func editorDidChange(_ textView: NSTextView) { updatePlaceholder() }
+}
+
+private final class ComposerTextView: NSTextView {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleClipboardKey(event) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if handleClipboardKey(event) { return }
+        super.keyDown(with: event)
+    }
+
+    override func paste(_ sender: Any?) {
+        if let text = NSPasteboard.general.string(forType: .string) {
+            pasteAsPlainText(sender)
+            Log.write("pasted plain text into independent composer: characters=\(text.count)")
+        } else {
+            super.paste(sender)
+        }
+    }
+
+    private func handleClipboardKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == .command, let key = event.charactersIgnoringModifiers?.lowercased() else {
+            return false
+        }
+
+        switch key {
+        case "a":
+            selectAll(nil)
+            return true
+        case "c":
+            copy(nil)
+            return true
+        case "v":
+            paste(nil)
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private final class ComposerEditorScrollView: NSScrollView {
+    private var isFittingDocumentView = false
+
+    override func layout() {
+        super.layout()
+        fitDocumentViewToViewport()
+    }
+
+    func fitDocumentViewToViewport() {
+        guard !isFittingDocumentView, let documentView, contentSize.width > 0 else { return }
+        let viewportWidth = contentSize.width
+        let textView = documentView as? NSTextView
+        let containerWidth = textView?.textContainer?.containerSize.width ?? 0
+        let needsFrameUpdate = abs(documentView.frame.width - viewportWidth) > 0.5
+        let needsContainerUpdate = abs(containerWidth - viewportWidth) > 0.5
+        guard needsFrameUpdate || needsContainerUpdate else { return }
+
+        isFittingDocumentView = true
+        defer { isFittingDocumentView = false }
+
+        if needsFrameUpdate {
+            var frame = documentView.frame
+            frame.origin.x = 0
+            frame.size.width = viewportWidth
+            frame.size.height = max(frame.size.height, contentSize.height)
+            documentView.frame = frame
+        }
+
+        if let textView {
+            textView.textContainer?.lineBreakMode = .byCharWrapping
+            textView.textContainer?.widthTracksTextView = true
+            textView.textContainer?.containerSize = NSSize(
+                width: viewportWidth,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+    }
 }
 
 private final class ComposerCardView: NSView {
