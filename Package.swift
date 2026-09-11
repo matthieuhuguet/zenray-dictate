@@ -7,7 +7,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ZenRayDictate",
-            path: "Sources/ZenRayDictate"
+            path: "Sources/ZenRayDictate",
+            linkerSettings: [
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("Speech")
+            ]
         )
     ]
 )

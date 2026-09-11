@@ -36,20 +36,20 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key>           <string>1</string>
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>ZenRay Dictate records your voice to transcribe it in the independent composer.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>ZenRay Dictate uses speech recognition to show a live preview while you dictate.</string>
 
-    <!-- Regular app: shows in the Dock, so clicking the icon is a way in that
-         does not depend on Fn or on a crowded menu bar. -->
+    <!-- Regular app: the Dock icon keeps the independent composer easy to reopen. -->
 
 </dict>
 </plist>
 PLIST
 
 echo "==> Signing"
-# An ad-hoc signature (--sign -) is derived from the binary's own hash, so it
-# changes at every build. TCC grants (Accessibility, Microphone) are tied to
-# the signature, so they were silently revoked on every rebuild even with the
-# tick left on in System Settings. A local certificate keeps the signature
-# stable across builds, so permissions granted once actually stay granted.
+# An ad-hoc signature changes at every build. TCC microphone grants are tied to
+# the signature, so a local certificate keeps permissions stable across builds.
 # Run ./make-certificate.sh once if this identity does not exist yet.
 SIGN_ID="ZenRayDictate Local"
 if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; then
@@ -69,7 +69,6 @@ echo "Built $(pwd)/$APP"
 echo
 echo "First run:"
 echo "  open $APP"
-echo "  1. Open Codex and grant it microphone access."
-echo "  2. Grant ZenRay Dictate Accessibility access for the global controls."
-echo "  3. Press Fn to show or hide Codex."
-echo "  4. Press Cmd+D to start or stop Codex dictation."
+echo "  1. Grant ZenRay Dictate microphone access when it starts its first recording."
+echo "  2. Press Control+D to start or stop independent dictation."
+echo "  3. Press Control+Q to cancel a recording."

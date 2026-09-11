@@ -20,21 +20,26 @@ final class GlobalHotKey {
     private let id: UInt32
     private(set) var isRegistered = false
 
-    /// Cmd+D. Chosen on request; it does shadow Cmd+D in every other app
-    /// while ZenRayDictate runs (Safari's Add Bookmark, Finder's Duplicate),
-    /// which is the trade the shorter combination buys.
     static let defaultKeyCode = UInt32(kVK_ANSI_D)
-    static let defaultModifiers = UInt32(cmdKey)
-    static let defaultDescription = "⌘D"
+    static let defaultModifiers = UInt32(controlKey)
+    static let defaultDescription = "⌃D"
 
-    init() {
+    private let keyCode: UInt32
+    private let modifiers: UInt32
+    private let shortcutDescription: String
+
+    init(keyCode: UInt32 = GlobalHotKey.defaultKeyCode,
+         modifiers: UInt32 = GlobalHotKey.defaultModifiers,
+         description: String = GlobalHotKey.defaultDescription) {
         id = Self.nextID
         Self.nextID += 1
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.shortcutDescription = description
     }
 
     @discardableResult
-    func register(keyCode: UInt32 = GlobalHotKey.defaultKeyCode,
-                  modifiers: UInt32 = GlobalHotKey.defaultModifiers) -> Bool {
+    func register() -> Bool {
         unregister()
         Self.instances[id] = self
 
@@ -63,7 +68,7 @@ final class GlobalHotKey {
         )
         isRegistered = (status == noErr && ref != nil)
         Log.write(isRegistered
-            ? "shortcut registered: keyCode \(keyCode), modifiers \(modifiers)"
+            ? "shortcut registered: \(shortcutDescription), keyCode \(keyCode), modifiers \(modifiers)"
             : "shortcut FAILED to register, OSStatus \(status) (likely taken by another app)")
         return isRegistered
     }

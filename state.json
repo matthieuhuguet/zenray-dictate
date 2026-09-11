@@ -1,7 +1,7 @@
 {
-  "task": "Use the native Codex composer for ZenRayDictate dictation",
+  "task": "Build an independent Codex-style composer for ZenRayDictate",
   "status": "complete",
-  "updated_at": "2026-09-11 11:37 Europe/Paris",
+  "updated_at": "2026-09-11 12:45 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
     "Removed the web transcription endpoint and browser recording retry layer",
@@ -12,7 +12,13 @@
     "Verified the native empty-stop path leaves the existing clipboard unchanged",
     "Verified the native composer copy path returns the complete composer text",
     "Verified the release binary links no WebKit framework and bundles no bridge or web asset",
-    "Made the helper open and activate the native Codex window on every launch"
+    "Made the helper open and activate the native Codex window on every launch",
+    "Added an independent native composer with live waveform and speech preview",
+    "Added Control+D start and stop and Control+Q cancellation",
+    "Saved every recording before transcription and restored pending recordings after relaunch",
+    "Used the Codex transcription endpoint with a local Whisper fallback",
+    "Verified the independent window at 860 by 360 points with accessible Start, Stop, Cancel, and Retry controls",
+    "Verified Control+D start and stop, Codex insertion, Control+Q cancellation, and durable retry after relaunch"
   ],
-  "next": "Speak a short phrase in Codex, press Cmd+D to stop, and paste the copied composer text."
+  "next": "Use the independent composer normally while keeping the Codex chat open separately."
 }

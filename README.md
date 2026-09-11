@@ -1,29 +1,23 @@
 # ZenRay Dictate
 
-A small macOS menu bar helper for the native Codex composer. `Cmd+D` starts or
-stops Codex dictation, and the complete composer text is copied after Stop.
+ZenRay Dictate is a separate macOS app that recreates the useful Codex composer interaction in an independent native window. The installed Codex chat remains its own app and is never embedded or controlled by this project.
 
-## How it works
+The window keeps one editable prompt area at the top and one recording bar at the bottom. While recording, it shows the waveform and a live speech preview. When recording stops, the app sends the saved WAV to the Codex transcription endpoint, then inserts the returned text into the prompt area.
 
-ZenRay Dictate does not implement a second composer. Codex owns the single
-visible interface, including the text area,
-live transcription, microphone, waveform, and native retry state.
+If the Codex request fails, the installed local Whisper MLX engine is tried. If both paths fail, `last-recording.wav` stays in Application Support and the Retry action uses that exact recording again.
 
-ZenRay Dictate uses macOS Accessibility to:
+## Controls
 
-1. Bring Codex to the front and focus its composer.
-2. Press the native `Dictate` control on `Cmd+D`.
-3. Press Codex's native `Stop dictation` control on the next `Cmd+D`.
-4. Read the finished composer and copy the complete text to the clipboard.
-5. Keep a failed clipboard result in memory for `Retry last copy`.
+- `Control+D` starts or stops dictation.
+- `Control+Q` cancels the current recording without changing the prompt.
+- The circular retry button retries the last saved recording.
+- The menu bar item can show, copy, clear, or retry the composer.
 
-The helper never sends a prompt. It only controls the composer and leaves the
-native Codex interface in charge of recording and transcription.
+The UI and flow are an independent reimplementation based on the visible Codex composer behavior. No Codex or ChatGPT source code is bundled.
 
 ## Setup
 
-Requires macOS 14+, the installed Codex desktop app, microphone access granted
-to Codex, and Accessibility access granted to ZenRay Dictate.
+Requires macOS 14+, the existing Codex login in `~/.codex/auth.json`, and the local ASR environment at `~/.venvs/asr-ja`.
 
 ```bash
 ./make-certificate.sh
@@ -31,22 +25,21 @@ to Codex, and Accessibility access granted to ZenRay Dictate.
 open ZenRayDictate.app
 ```
 
-Press `Cmd+D` anywhere to start or stop dictation in Codex. Press `Fn` to show
-or hide Codex. Use the menu bar item to clear, copy, or retry the composer.
+The first recording asks for microphone access. Speech recognition access enables the live preview but is not required for the final Codex transcription.
 
 ## Project layout
 
 | File | Role |
 |---|---|
-| `main.swift` | Entry point |
-| `AppDelegate.swift` | Menu bar, shortcuts, and lifecycle |
-| `CodexController.swift` | Native Codex Accessibility controller and clipboard flow |
-| `GlobalHotKey.swift` | System-wide `Cmd+D` shortcut |
-| `FnKeyMonitor.swift` | System-wide `Fn` monitor |
-| `AudioInput.swift` | Preferred system input device selection |
-| `Permissions.swift` | Accessibility permission helpers |
+| `main.swift` | App entry point |
+| `AppDelegate.swift` | Window lifecycle, menu bar, and global shortcuts |
+| `ComposerWindowController.swift` | Independent Codex-style composer and retry state |
+| `AudioCapture.swift` | WAV capture, waveform levels, and live speech preview |
+| `Transcriber.swift` | Codex endpoint, local Whisper fallback, and response validation |
+| `GlobalHotKey.swift` | System-wide Control+D and Control+Q shortcuts |
 | `Log.swift` | Log at `~/Library/Logs/ZenRayDictate.log` |
-| `Entitlements.plist` | Hardened runtime entitlements |
+| `Entitlements.plist` | Audio input entitlement |
+| `Scripts/verify-independent-composer.sh` | Repeatable build and bundle checks |
 
 ## License
 
