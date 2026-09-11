@@ -10,8 +10,14 @@ If the Codex request fails, the installed local Whisper MLX engine is tried. If 
 
 - `Control+D` starts or stops dictation.
 - `Control+Q` cancels the current recording without changing the prompt.
+- Clicking outside the composer fades it out.
+- `Fn` fades the composer out.
+- `Command+Q` clears the complete composer text.
+- `Command+X` copies the complete composer text, then clears it.
 - The circular retry button retries the last saved recording.
 - The menu bar item can show, copy, clear, or retry the composer.
+
+The composer keeps a fixed `860 x 360` point frame. Long prompt text wraps inside the editor and scrolls there instead of resizing the window.
 
 The UI and flow are an independent reimplementation based on the visible Codex composer behavior. No Codex or ChatGPT source code is bundled.
 
@@ -25,7 +31,7 @@ Requires macOS 14+, the existing Codex login in `~/.codex/auth.json`, and the lo
 open ZenRayDictate.app
 ```
 
-The first recording asks for microphone access. Speech recognition access enables the live preview but is not required for the final Codex transcription.
+The first recording asks for microphone access. Speech recognition access enables the live preview but is not required for the final Codex transcription. The Fn control asks for Accessibility access when macOS has not granted it yet.
 
 ## Project layout
 
@@ -37,6 +43,7 @@ The first recording asks for microphone access. Speech recognition access enable
 | `AudioCapture.swift` | WAV capture, waveform levels, and live speech preview |
 | `Transcriber.swift` | Codex endpoint, local Whisper fallback, and response validation |
 | `GlobalHotKey.swift` | System-wide Control+D and Control+Q shortcuts |
+| `FnKeyMonitor.swift` | System-wide Fn fade-out control |
 | `Log.swift` | Log at `~/Library/Logs/ZenRayDictate.log` |
 | `Entitlements.plist` | Audio input entitlement |
 | `Scripts/verify-independent-composer.sh` | Repeatable build and bundle checks |

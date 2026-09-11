@@ -1,7 +1,7 @@
 {
-  "task": "Build an independent Codex-style composer for ZenRayDictate",
+  "task": "Restore the former composer controls in the independent ZenRayDictate app",
   "status": "complete",
-  "updated_at": "2026-09-11 12:45 Europe/Paris",
+  "updated_at": "2026-09-11 13:05 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
     "Removed the web transcription endpoint and browser recording retry layer",
@@ -18,7 +18,10 @@
     "Saved every recording before transcription and restored pending recordings after relaunch",
     "Used the Codex transcription endpoint with a local Whisper fallback",
     "Verified the independent window at 860 by 360 points with accessible Start, Stop, Cancel, and Retry controls",
-    "Verified Control+D start and stop, Codex insertion, Control+Q cancellation, and durable retry after relaunch"
+    "Verified Control+D start and stop, Codex insertion, Control+Q cancellation, and durable retry after relaunch",
+    "Restored fade out after focus loss and pressing Fn, using the former control behavior",
+    "Locked the composer frame and verified long prompt text wraps inside the editor",
+    "Restored Command+Q clear and Command+X copy-then-clear controls"
   ],
   "next": "Use the independent composer normally while keeping the Codex chat open separately."
 }

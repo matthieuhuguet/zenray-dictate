@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modifiers: UInt32(controlKey),
         description: "⌃Q"
     )
+    private let fnKey = FnKeyMonitor()
     private var statusItem: NSStatusItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -26,6 +27,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dictateHotKey.register()
         cancelHotKey.onPress = { [weak self] in self?.composer.cancelRecording() }
         cancelHotKey.register()
+
+        fnKey.onPress = { [weak self] in
+            Log.write("Fn press received")
+            self?.composer.fadeOut(reason: "Fn")
+        }
+        let fnStarted = fnKey.start()
+        Log.write("Fn fade-out monitor started: \(fnStarted)")
+        if !fnStarted {
+            FnKeyMonitor.requestTrust()
+            Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
+                guard let self else {
+                    timer.invalidate()
+                    return
+                }
+                guard self.fnKey.start() else { return }
+                timer.invalidate()
+                Log.write("Fn fade-out monitor started after Accessibility grant")
+            }
+        }
+
         Log.write("independent composer ready; Codex chat remains a separate app")
     }
 
@@ -41,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "⌃D starts/stops dictation, ⌃Q cancels the recording",
+            title: "⌃D starts/stops, ⌃Q cancels, ⌘X cuts all, ⌘Q clears, Fn fades out",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
@@ -86,12 +107,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func applicationDidBecomeActive(_ notification: Notification) {
-        composer.show()
+    func applicationDidResignActive(_ notification: Notification) {
+        composer.fadeOut(reason: "app inactive")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         dictateHotKey.unregister()
         cancelHotKey.unregister()
+        fnKey.stop()
     }
 }

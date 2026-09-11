@@ -1,16 +1,18 @@
 import AppKit
 import AVFoundation
+import QuartzCore
 import Speech
 
 // Iteration timestamp: 2026-09-11.
 final class ComposerWindowController: NSWindowController, NSWindowDelegate {
 
     private let composer = ComposerViewController()
+    private var fadeSerial = 0
 
     override init(window: NSWindow?) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: ComposerTokens.windowWidth, height: ComposerTokens.windowHeight),
-            styleMask: [.titled, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -28,8 +30,9 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
-        window.contentMinSize = NSSize(width: ComposerTokens.minimumWindowWidth, height: ComposerTokens.minimumWindowHeight)
-        window.setContentSize(NSSize(width: ComposerTokens.windowWidth, height: ComposerTokens.windowHeight))
+        window.contentMinSize = ComposerTokens.windowSize
+        window.contentMaxSize = ComposerTokens.windowSize
+        window.setContentSize(ComposerTokens.windowSize)
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.center()
@@ -39,12 +42,34 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
 
     func show() {
         guard let window else { return }
+        fadeSerial += 1
+        window.alphaValue = 1
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         composer.focusEditor()
     }
 
-    func toggleDictation() { composer.toggleDictation() }
+    func fadeOut(reason: String = "focus loss") {
+        guard let window, window.isVisible else { return }
+        fadeSerial += 1
+        let serial = fadeSerial
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = ComposerTokens.fadeDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().alphaValue = 0
+        } completionHandler: { [weak self, weak window] in
+            guard let self, self.fadeSerial == serial else { return }
+            window?.orderOut(nil)
+            window?.alphaValue = 1
+            Log.write("composer faded out: \(reason)")
+        }
+    }
+
+    func toggleDictation() {
+        show()
+        composer.toggleDictation()
+    }
     func cancelRecording() { composer.cancelRecording() }
     func retryPendingRecording() { composer.retryPendingRecording() }
     func copyComposerText() { composer.copyComposerText() }
@@ -54,13 +79,20 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
         sender.orderOut(nil)
         return false
     }
+
+    func windowDidResignKey(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window, !window.isKeyWindow else { return }
+            self.fadeOut(reason: "window lost key")
+        }
+    }
 }
 
 private enum ComposerTokens {
     static let windowWidth: CGFloat = 860
     static let windowHeight: CGFloat = 360
-    static let minimumWindowWidth: CGFloat = 640
-    static let minimumWindowHeight: CGFloat = 280
+    static let windowSize = NSSize(width: windowWidth, height: windowHeight)
+    static let fadeDuration: TimeInterval = 0.16
     static let cardRadius: CGFloat = 24
     static let contentInset: CGFloat = 24
     static let editorFontSize: CGFloat = 21
@@ -93,12 +125,14 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     private let progress = NSProgressIndicator()
     private var state: ComposerState = .idle
     private var liveText = ""
+    private var localKeyMonitor: Any?
 
     override func loadView() { view = card }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         configureInterface()
+        installLocalKeyMonitor()
         capture.onLevel = { [weak self] level in self?.waveform.add(level: CGFloat(level)) }
         capture.onLiveText = { [weak self] text in self?.setLiveTranscript(text) }
         capture.onDuration = { [weak self] duration in self?.updateDuration(duration) }
@@ -108,6 +142,10 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             updateActionButton()
             Log.write("pending recording restored: \(saved.lastPathComponent)")
         }
+    }
+
+    deinit {
+        if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
     }
 
     func focusEditor() {
@@ -164,6 +202,23 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         Log.write("copied independent composer text: \(text.count) characters")
     }
 
+    func cutComposerText() {
+        guard state != .recording else { return }
+        let text = editor.string
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(text, forType: .string) else {
+            Log.write("cut independent composer text failed: pasteboard rejected the string")
+            return
+        }
+        editor.string = ""
+        editorDidChange(editor)
+        state = .idle
+        stateLabel.stringValue = "Ready"
+        updateActionButton()
+        Log.write("cut independent composer text: \(text.count) characters")
+    }
+
     func clearComposer() {
         guard state != .recording else { return }
         editor.string = ""
@@ -179,6 +234,8 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         editorScroll.drawsBackground = false
         editorScroll.borderType = .noBorder
         editorScroll.hasVerticalScroller = true
+        editorScroll.hasHorizontalScroller = false
+        editorScroll.horizontalScrollElasticity = .none
         editorScroll.translatesAutoresizingMaskIntoConstraints = false
 
         editor.isRichText = false
@@ -186,11 +243,16 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         editor.isSelectable = true
         editor.drawsBackground = false
         editor.allowsUndo = true
+        editor.isHorizontallyResizable = false
+        editor.isVerticallyResizable = true
+        editor.autoresizingMask = [.width]
         editor.font = NSFont(name: "Inter", size: ComposerTokens.editorFontSize)
             ?? NSFont.systemFont(ofSize: ComposerTokens.editorFontSize)
         editor.textColor = .labelColor
         editor.insertionPointColor = .labelColor
         editor.textContainerInset = NSSize(width: 0, height: 6)
+        editor.textContainer?.widthTracksTextView = true
+        editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         editor.delegate = self
         editorScroll.documentView = editor
 
@@ -275,6 +337,24 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         ])
         updatePlaceholder()
         updateActionButton()
+    }
+
+    private func installLocalKeyMonitor() {
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, let window = self.view.window, window.isKeyWindow else { return event }
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let character = event.charactersIgnoringModifiers?.lowercased()
+
+            if modifiers == .command, character == "q" {
+                self.clearComposer()
+                return nil
+            }
+            if modifiers == .command, character == "x" {
+                self.cutComposerText()
+                return nil
+            }
+            return event
+        }
     }
 
     private func configureButton(_ button: NSButton, symbol: String, accessibility: String, action: Selector) {
