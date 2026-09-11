@@ -1,7 +1,7 @@
 {
-  "task": "ZenRayDictate clipboard, system appearance, and compact controls",
+  "task": "Repair Cmd+D transcription handoff and five-second macOS-style notifications",
   "status": "complete",
-  "updated_at": "2026-08-22 18:17 Asia/Tokyo",
+  "updated_at": "2026-09-11 08:41 Europe/Paris",
   "completed": [
     "Renamed the local project folder from zenray-gpt-realtime-audio to ZenRayDictate",
     "Added layout-aware local Cmd+Q clearing for the compact composer",
@@ -11,7 +11,10 @@
     "Set Cmd+X as the cut-all shortcut",
     "Made the compact bar follow the live macOS light or dark appearance",
     "Removed the unused Send Prompt and Send Dictated Message button, including while recording",
-    "Removed the unused intensity selector from the compact bar"
+    "Removed the unused intensity selector from the compact bar",
+    "Made Cmd+D start the clipboard watcher before ChatGPT completes transcription",
+    "Accepted the current ChatGPT transcription endpoint and response formats",
+    "Made macOS-style toast notifications expire after five seconds with a 300 ms fade"
   ],
-  "next": "Use the deployed app normally."
+  "next": "Use ZenRayDictate normally."
 }

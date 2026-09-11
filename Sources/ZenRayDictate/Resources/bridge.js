@@ -59,11 +59,39 @@
   });
 
   const isDictationStopButton = (...metadata) => metadata.some((value) =>
-    /(^|\s)(stop|submit|finish|end|done)\s+dictation($|\s)/i.test(normalizeText(value))
+    /(^|[\s_-])(stop|submit|finish|end|done)[\s_-]+dictation($|[\s_-])/i.test(normalizeText(value))
   );
 
   const isIntensityButton = (text) =>
     /^(low|medium|high|extra high)$/i.test(normalizeText(text));
+
+  const transcriptFromPayload = (payload) => normalizeText(
+    payload?.text || payload?.transcript || payload?.result?.text || payload?.data?.text
+  );
+
+  const transcriptFromBody = (body, contentType = '') => {
+    const raw = String(body || '').trim();
+    if (!raw) return '';
+
+    try {
+      const transcript = transcriptFromPayload(JSON.parse(raw));
+      if (transcript) return transcript;
+    } catch (e) {}
+
+    const events = raw.split(/\r?\n/)
+      .map((line) => line.trim().replace(/^data:\s*/i, ''))
+      .filter((line) => line && line !== '[DONE]')
+      .map((line) => {
+        try { return transcriptFromPayload(JSON.parse(line)); } catch (e) { return ''; }
+      })
+      .filter(Boolean);
+    if (events.length) return normalizeText(events.join(' '));
+
+    return /text\/plain/i.test(contentType) ? raw : '';
+  };
+
+  const isTranscriptionRequest = (url) =>
+    /(?:^|\/)(?:backend-api\/)?transcribe(?:[/?#]|$)/i.test(String(url || ''));
 
   // Lets the Node regression test exercise the exact production helpers
   // without constructing a fake ChatGPT DOM.
@@ -75,7 +103,10 @@
       themeName,
       isSendButton,
       isDictationStopButton,
-      isIntensityButton
+      isIntensityButton,
+      transcriptFromPayload,
+      transcriptFromBody,
+      isTranscriptionRequest
     };
     return;
   }
@@ -117,15 +148,17 @@
   };
 
   let transcriptCopySerial = 0;
+  let pendingTranscriptCopy = null;
 
   const copyFullComposerAfterTranscript = (before, transcript) => {
     const serial = ++transcriptCopySerial;
+    pendingTranscriptCopy = { serial, before, transcript: normalizeText(transcript) };
     let attempts = 0;
     let last = '';
     let stableSamples = 0;
 
     const check = () => {
-      if (serial !== transcriptCopySerial) return;
+      if (pendingTranscriptCopy?.serial !== serial) return;
 
       const current = normalizeText(editorText(findEditor()));
       if (current && current !== normalizeText(before)) {
@@ -137,21 +170,37 @@
 
         // Three equal samples, 80 ms apart, avoid copying a half-inserted DOM.
         if (stableSamples >= 2) {
+          pendingTranscriptCopy = null;
           send('transcript', current);
           return;
         }
       }
 
       attempts += 1;
-      if (attempts < 38) {
+      if (attempts < 125) {
         setTimeout(check, 80);
         return;
       }
 
+      pendingTranscriptCopy = null;
       send('transcript', resolveClipboardText(before, transcript, current));
     };
 
     setTimeout(check, 80);
+  };
+
+  const updateTranscriptHint = (before, transcript) => {
+    if (pendingTranscriptCopy) {
+      pendingTranscriptCopy.transcript = normalizeText(transcript);
+      return;
+    }
+    copyFullComposerAfterTranscript(before, transcript);
+  };
+
+  const readTranscriptResponse = async (response) => {
+    const body = await response.clone().text();
+    const contentType = response.headers?.get?.('content-type') || '';
+    return transcriptFromBody(body, contentType);
   };
 
   // --- 1. watch the transcription response -----------------------------------
@@ -161,17 +210,14 @@
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     const composerBefore = editorText(findEditor());
     const promise = originalFetch.apply(this, arguments);
-    if (/\/backend-api\/transcribe/.test(url)) {
+    if (isTranscriptionRequest(url)) {
       promise
         .then(async (res) => {
           try {
-            const data = await res.clone().json();
-            copyFullComposerAfterTranscript(composerBefore, (data && data.text) || '');
-          } catch (e) {
-            send('error', 'Unreadable response from ChatGPT.');
-          }
+            updateTranscriptHint(composerBefore, await readTranscriptResponse(res));
+          } catch (e) {}
         })
-        .catch(() => send('error', 'The transcription request failed.'));
+        .catch(() => {});
     }
     return promise;
   };
@@ -268,7 +314,8 @@
     return nodes.flatMap((node) => [
       node.getAttribute('aria-label'),
       node.getAttribute('title'),
-      node.getAttribute('data-testid')
+      node.getAttribute('data-testid'),
+      node.textContent
     ]);
   };
 
@@ -471,19 +518,29 @@
 
   // --- 3. drive dictation from Cmd+D -------------------------------------
 
-  // Matched by pattern, not by an exact label: the stop control has been seen
-  // as "Submit dictation" on one build and "Stop dictation" on another.
-  // Hard coding either one made the app believe dictation had vanished while
-  // it was in fact still running.
+  // 2026-09-11 08:34: start the DOM watcher before ChatGPT finishes its network response.
+  const isVisibleControl = (control) => {
+    const style = window.getComputedStyle?.(control);
+    if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+    const rect = control.getBoundingClientRect?.();
+    return !rect || (rect.width > 0 && rect.height > 0);
+  };
+
+  // Matched by metadata and visible text because ChatGPT changes the label
+  // attribute between builds while keeping the same live control.
   const match = (re) =>
-    [...document.querySelectorAll('button')].find((b) =>
-      re.test(b.getAttribute('aria-label') || '')
-    );
+    [...document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]')]
+      .find((control) => isVisibleControl(control) && re.test(controlMetadata(control).join(' ')));
 
   window.__zrToggleDictation = () => {
-    const stop = match(/(stop|submit|finish|end|done)\s+dictation/i);
-    if (stop) { stop.click(); return 'stopped'; }
-    const start = match(/start\s+dictation|begin\s+dictation/i);
+    const stop = match(/(stop|submit|finish|end|done)[\s_-]+dictation/i);
+    if (stop) {
+      const before = editorText(findEditor());
+      stop.click();
+      copyFullComposerAfterTranscript(before, '');
+      return 'stopped';
+    }
+    const start = match(/(start|begin)[\s_-]+dictation/i);
     if (start) { start.click(); return 'started'; }
     return 'no-button';
   };

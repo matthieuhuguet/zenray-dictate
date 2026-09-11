@@ -16,7 +16,10 @@ const {
   themeName,
   isSendButton,
   isDictationStopButton,
-  isIntensityButton
+  isIntensityButton,
+  transcriptFromPayload,
+  transcriptFromBody,
+  isTranscriptionRequest
 } = context.window.__zrClipboardTest;
 
 test('dictation copies existing and newly dictated text', () => {
@@ -55,7 +58,27 @@ test('only prompt send buttons are removed', () => {
   assert.equal(isSendButton('Submit dictation', null), false);
   assert.equal(isDictationStopButton('Stop dictation'), true);
   assert.equal(isDictationStopButton('Submit dictation'), true);
+  assert.equal(isDictationStopButton('stop-dictation'), true);
   assert.equal(isDictationStopButton('Send dictated message'), false);
+});
+
+test('dictation accepts JSON, event-stream, and plain-text responses', () => {
+  assert.equal(transcriptFromPayload({ text: 'Bonjour' }), 'Bonjour');
+  assert.equal(transcriptFromPayload({ transcript: 'Bonsoir' }), 'Bonsoir');
+  assert.equal(transcriptFromBody('{"text":"Bonjour"}', 'application/json'), 'Bonjour');
+  assert.equal(
+    transcriptFromBody('data: {"text":"Bonjour"}\ndata: {"text":"le monde"}\ndata: [DONE]', 'text/event-stream'),
+    'Bonjour le monde'
+  );
+  assert.equal(transcriptFromBody('Bonjour', 'text/plain'), 'Bonjour');
+  assert.equal(transcriptFromBody('<html>error</html>', 'text/html'), '');
+});
+
+test('recognizes both ChatGPT transcription endpoint shapes', () => {
+  assert.equal(isTranscriptionRequest('https://chatgpt.com/backend-api/transcribe'), true);
+  assert.equal(isTranscriptionRequest('/transcribe'), true);
+  assert.equal(isTranscriptionRequest('/backend-api/transcribe?language=fr'), true);
+  assert.equal(isTranscriptionRequest('/backend-api/transcriptions'), false);
 });
 
 test('the compact intensity selector is removed at every level', () => {
