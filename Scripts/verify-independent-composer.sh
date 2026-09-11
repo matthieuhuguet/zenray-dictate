@@ -33,6 +33,11 @@ grep -q 'pasteAsPlainText' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'buildMainMenu' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'Paste into composer' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'toggleVisibility' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'private final class CircularButton' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'layer.cornerCurve = .circular' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'layer.masksToBounds = true' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'cancelButton.widthAnchor.constraint(equalTo: cancelButton.heightAnchor)' Sources/ZenRayDictate/ComposerWindowController.swift
+grep -q 'primaryButton.widthAnchor.constraint(equalTo: primaryButton.heightAnchor)' Sources/ZenRayDictate/ComposerWindowController.swift
 if grep -q 'liveTranscript' Sources/ZenRayDictate/ComposerWindowController.swift; then
     echo "live transcript UI must stay removed" >&2
     exit 1

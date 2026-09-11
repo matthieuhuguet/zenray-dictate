@@ -16,6 +16,8 @@ The independent composer keeps only the useful controls from the former interfac
 
 The window stays fixed at `860 x 360` points. The prompt editor wraps long text and scrolls inside its own area, so speaking or writing more never changes the panel geometry. The former live transcript field is removed because it could contribute an unbounded intrinsic width.
 
+Both action buttons use equal width and height constraints, a circular corner curve, and a masked layer so their backgrounds remain perfect circles after layout.
+
 ## Failure contract
 
 The WAV is copied to `~/Library/Application Support/ZenRayDictate/Pending/last-recording.wav` before every transcription attempt. A successful transcription clears that file. A failed attempt leaves it in place and changes the UI to `Saved for retry`.

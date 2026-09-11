@@ -149,6 +149,17 @@ private enum ComposerState: Equatable {
     case failed(String)
 }
 
+private final class CircularButton: NSButton {
+    override func layout() {
+        super.layout()
+        guard let layer else { return }
+        let diameter = min(bounds.width, bounds.height)
+        layer.cornerRadius = diameter / 2
+        layer.cornerCurve = .circular
+        layer.masksToBounds = true
+    }
+}
+
 private final class ComposerViewController: NSViewController, NSTextViewDelegate {
 
     private let capture = AudioCapture()
@@ -372,6 +383,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             cancelButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -ComposerTokens.contentInset),
             cancelButton.widthAnchor.constraint(equalToConstant: ComposerTokens.buttonSize),
             cancelButton.heightAnchor.constraint(equalToConstant: ComposerTokens.buttonSize),
+            cancelButton.widthAnchor.constraint(equalTo: cancelButton.heightAnchor),
 
             waveform.leadingAnchor.constraint(equalTo: cancelButton.trailingAnchor, constant: 16),
             waveform.trailingAnchor.constraint(equalTo: primaryButton.leadingAnchor, constant: -16),
@@ -387,6 +399,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             primaryButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -ComposerTokens.contentInset),
             primaryButton.widthAnchor.constraint(equalToConstant: ComposerTokens.buttonSize),
             primaryButton.heightAnchor.constraint(equalToConstant: ComposerTokens.buttonSize),
+            primaryButton.widthAnchor.constraint(equalTo: primaryButton.heightAnchor),
 
             progress.centerXAnchor.constraint(equalTo: primaryButton.centerXAnchor),
             progress.centerYAnchor.constraint(equalTo: primaryButton.centerYAnchor)
@@ -432,6 +445,8 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         button.wantsLayer = true
         button.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.18).cgColor
         button.layer?.cornerRadius = ComposerTokens.buttonSize / 2
+        button.layer?.cornerCurve = .circular
+        button.layer?.masksToBounds = true
     }
 
     private func startDictation() {
