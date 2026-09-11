@@ -1,20 +1,17 @@
 {
-  "task": "Repair Cmd+D transcription handoff and five-second macOS-style notifications",
+  "task": "Use the native Codex composer for ZenRayDictate dictation",
   "status": "complete",
-  "updated_at": "2026-09-11 08:41 Europe/Paris",
+  "updated_at": "2026-09-11 10:24 Europe/Paris",
   "completed": [
-    "Renamed the local project folder from zenray-gpt-realtime-audio to ZenRayDictate",
-    "Added layout-aware local Cmd+Q clearing for the compact composer",
-    "Added a discreet clear button that appears only when text exists",
-    "Added automatic composer focus and fade-out on deactivation",
-    "Built, signed, launched, and visually checked the compact bar",
-    "Set Cmd+X as the cut-all shortcut",
-    "Made the compact bar follow the live macOS light or dark appearance",
-    "Removed the unused Send Prompt and Send Dictated Message button, including while recording",
-    "Removed the unused intensity selector from the compact bar",
-    "Made Cmd+D start the clipboard watcher before ChatGPT completes transcription",
-    "Accepted the current ChatGPT transcription endpoint and response formats",
-    "Made macOS-style toast notifications expire after five seconds with a 300 ms fade"
+    "Removed the embedded web composer and its JavaScript bridge",
+    "Removed the web transcription endpoint and browser recording retry layer",
+    "Connected Cmd+D to the installed Codex native Dictate control through Accessibility",
+    "Copied the complete native Codex composer after Stop dictation",
+    "Kept failed clipboard text in memory for Retry last copy",
+    "Rebuilt and signed the app with the stable ZenRayDictate Local identity",
+    "Verified the native empty-stop path leaves the existing clipboard unchanged",
+    "Verified the native composer copy path returns the complete composer text",
+    "Verified the release binary links no WebKit framework and bundles no bridge or web asset"
   ],
-  "next": "Use ZenRayDictate normally."
+  "next": "Speak a short phrase in Codex, press Cmd+D to stop, and paste the copied composer text."
 }

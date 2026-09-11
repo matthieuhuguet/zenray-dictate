@@ -2,7 +2,7 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
-    private lazy var chat = ChatWindow()
+    private lazy var codex = CodexController()
     private let hotKey = GlobalHotKey()   // Cmd+D, needs no permission
     private let fnKey = FnKeyMonitor()    // Fn, bonus once Accessibility holds
     private var statusItem: NSStatusItem!
@@ -12,19 +12,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         LoginItem.enable()
         AudioInput.startKeepingPreferred()
-        _ = chat
+        _ = codex
 
-        Permissions.requestMicrophone { granted in
-            if !granted { Permissions.openMicrophoneSettings() }
-        }
-
-        // Cmd+D drives the dictation itself: reveal the bar if needed, then
-        // click whichever of Start or Stop Dictation the page is showing.
-        hotKey.onPress = { [weak self] in self?.chat.toggleDictation() }
+        // Cmd+D drives the native Codex dictation control.
+        hotKey.onPress = { [weak self] in self?.codex.toggleDictation() }
         hotKey.register()
 
         // Fn is a separate, simpler gesture: just show or hide the window.
-        fnKey.onPress = { [weak self] in self?.chat.toggle() }
+        fnKey.onPress = { [weak self] in self?.codex.toggle() }
         let fnStarted = fnKey.start()
         Log.write("accessibility trusted: \(Permissions.accessibility), Fn tap started: \(fnStarted)")
         if !fnStarted {
@@ -47,16 +42,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "\(GlobalHotKey.defaultDescription) starts/stops, ⌘X cuts all, ⌘Q clears, Fn shows/hides",
+            title: "\(GlobalHotKey.defaultDescription) starts/stops Codex dictation, Fn shows/hides Codex",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
         menu.addItem(hint)
         menu.addItem(.separator())
 
-        add(menu, "Show", #selector(showChat))
-        add(menu, "Sign in to ChatGPT…", #selector(signIn))
-        add(menu, "Back to the compact bar", #selector(backToCompact))
+        add(menu, "Show Codex", #selector(showCodex))
+        add(menu, "Clear Codex composer", #selector(clearComposer))
+        add(menu, "Copy Codex composer", #selector(cutComposer))
+        add(menu, "Retry last copy", #selector(retryCopy))
         menu.addItem(.separator())
 
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLoginItem), keyEquivalent: "")
@@ -75,10 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item)
     }
 
-    @objc private func showChat() { chat.show() }
-
-    @objc private func signIn() { chat.showFullPageForSignIn() }
-    @objc private func backToCompact() { chat.backToCompact() }
+    @objc private func showCodex() { codex.show() }
+    @objc private func clearComposer() { codex.clearComposer() }
+    @objc private func cutComposer() { codex.cutComposer() }
+    @objc private func retryCopy() { codex.retryPendingCopy() }
 
     @objc private func toggleLoginItem() {
         if LoginItem.isEnabled { LoginItem.disable() } else { LoginItem.enable() }
@@ -87,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Clicking the Dock icon while the window is hidden must bring it back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        chat.show()
+        codex.show()
         return true
     }
 }

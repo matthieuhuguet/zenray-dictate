@@ -17,7 +17,6 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/ZenRayDictate"
-cp Sources/ZenRayDictate/Resources/bridge.js "$APP/Contents/Resources/bridge.js"
 if [[ -f AppIcon.icns ]]; then
     cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
@@ -41,9 +40,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <!-- Regular app: shows in the Dock, so clicking the icon is a way in that
          does not depend on Fn or on a crowded menu bar. -->
 
-    <!-- The embedded page records your voice. -->
-    <key>NSMicrophoneUsageDescription</key>
-    <string>ZenRay Dictate records your voice so ChatGPT can transcribe it.</string>
 </dict>
 </plist>
 PLIST
@@ -62,27 +58,18 @@ if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_ID"; 
     SIGN_ID="-"
 fi
 
-# The entitlements are not optional: under the hardened runtime, an app without
-# com.apple.security.device.audio-input is denied the microphone before TCC is
-# consulted, so it never appears in System Settings > Privacy > Microphone at
-# all. That is the failure this file exists to prevent.
 codesign --force --deep --sign "$SIGN_ID" \
     --identifier "$BUNDLE_ID" \
     --options runtime \
     --entitlements Entitlements.plist \
     "$APP"
 
-echo "==> Checking the microphone entitlement really landed"
-codesign -d --entitlements - --xml "$APP" 2>/dev/null | grep -q "audio-input" \
-    && echo "    ok" \
-    || { echo "    MISSING, the microphone will not work"; exit 1; }
-
 echo
 echo "Built $(pwd)/$APP"
 echo
 echo "First run:"
 echo "  open $APP"
-echo "  1. Log in to ChatGPT in the window that opens."
-echo "  2. Grant the microphone and, if asked, Accessibility (for the Fn key)."
-echo "  3. Press Fn any time to show or hide the window."
-echo "  4. Click Start Dictation, talk, click Stop Dictation. Copied automatically."
+echo "  1. Open Codex and grant it microphone access."
+echo "  2. Grant ZenRay Dictate Accessibility access for the global controls."
+echo "  3. Press Fn to show or hide Codex."
+echo "  4. Press Cmd+D to start or stop Codex dictation."
