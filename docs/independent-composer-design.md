@@ -12,7 +12,7 @@ ZenRay Dictate reimplements that contract in Swift and does not copy bundled Cod
 
 ## Restored controls
 
-The independent composer keeps only the useful controls from the former interface: clicking outside fades it out, Fn shows or hides it, Control+D starts or stops dictation and reveals the composer when needed, Control+Q cancels the current recording, the x button clears idle text or cancels a recording, Command+Q clears the complete prompt, and Command+X copies then clears the complete prompt. Command+C and Command+V explicitly copy and paste plain text in the editor.
+The independent composer keeps only the useful controls from the former interface: clicking outside fades it out, Fn shows or hides it, Control+D or legacy Command+D starts or stops dictation and reveals the composer when needed, Control+Q cancels the current recording, the x button clears idle text or cancels a recording, Command+Q clears the complete prompt, and Command+X copies then clears the complete prompt. Command+C and Command+V explicitly copy and paste plain text in the editor.
 
 The window stays fixed at `860 x 360` points. The prompt editor wraps long text and scrolls inside its own area, so speaking or writing more never changes the panel geometry. The former live transcript field is removed because it could contribute an unbounded intrinsic width.
 

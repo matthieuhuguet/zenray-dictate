@@ -15,6 +15,7 @@ if otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'WebKit.fra
     exit 1
 fi
 grep -q 'kVK_ANSI_D' Sources/ZenRayDictate/AppDelegate.swift
+grep -q 'description: "⌘D"' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'kVK_ANSI_Q' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'controlKey' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'FnKeyMonitor' Sources/ZenRayDictate/AppDelegate.swift

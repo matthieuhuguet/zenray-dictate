@@ -10,6 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         modifiers: UInt32(controlKey),
         description: "⌃D"
     )
+    private let legacyDictateHotKey = GlobalHotKey(
+        keyCode: UInt32(kVK_ANSI_D),
+        modifiers: UInt32(cmdKey),
+        description: "⌘D"
+    )
     private let cancelHotKey = GlobalHotKey(
         keyCode: UInt32(kVK_ANSI_Q),
         modifiers: UInt32(controlKey),
@@ -27,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         dictateHotKey.onPress = { [weak self] in self?.composer.toggleDictation() }
         dictateHotKey.register()
+        legacyDictateHotKey.onPress = { [weak self] in self?.composer.toggleDictation() }
+        legacyDictateHotKey.register()
         cancelHotKey.onPress = { [weak self] in self?.composer.cancelRecording() }
         cancelHotKey.register()
 
@@ -91,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "⌃D starts/stops, ⌃Q cancels, ⌘X cuts all, ⌘Q clears, Fn shows/hides",
+            title: "⌃D or ⌘D starts/stops, ⌃Q cancels, ⌘X cuts all, ⌘Q clears, Fn shows/hides",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
@@ -146,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         dictateHotKey.unregister()
+        legacyDictateHotKey.unregister()
         cancelHotKey.unregister()
         fnKey.stop()
     }

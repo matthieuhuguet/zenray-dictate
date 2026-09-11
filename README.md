@@ -8,7 +8,7 @@ If the Codex request fails, the installed local Whisper MLX engine is tried. If 
 
 ## Controls
 
-- `Control+D` starts or stops dictation.
+- `Control+D` or the legacy `Command+D` starts or stops dictation.
 - `Control+Q` cancels the current recording without changing the prompt.
 - Clicking outside the composer fades it out.
 - `Fn` shows or hides the composer.
@@ -45,7 +45,7 @@ The first recording asks for microphone access. The Fn control asks for Accessib
 | `ComposerWindowController.swift` | Independent Codex-style composer and retry state |
 | `AudioCapture.swift` | WAV capture and waveform levels |
 | `Transcriber.swift` | Codex endpoint, local Whisper fallback, and response validation |
-| `GlobalHotKey.swift` | System-wide Control+D and Control+Q shortcuts |
+| `GlobalHotKey.swift` | System-wide Control+D, legacy Command+D, and Control+Q shortcuts |
 | `FnKeyMonitor.swift` | System-wide Fn visibility control |
 | `Log.swift` | Log at `~/Library/Logs/ZenRayDictate.log` |
 | `Entitlements.plist` | Audio input entitlement |
