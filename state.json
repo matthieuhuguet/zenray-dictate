@@ -1,6 +1,6 @@
 {
   "task": "Release ZenRay Dictate V2 with a stable caret-only empty editor",
-  "status": "in_progress",
+  "status": "complete",
   "updated_at": "2026-09-12 10:50 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
@@ -37,5 +37,5 @@
     "Wrote precise V2 patch notes covering the caret fix, layout, controls, transcription, and retry memory",
     "Verified the V2 runtime window at 860 by 140 points and buttons at 38 by 38 points"
   ],
-  "next": "Push the V2 commit and v2.0.0 tag to the zenray-dictate GitHub repository."
+  "next": "Use the independent composer normally while keeping the Codex chat open separately."
 }
