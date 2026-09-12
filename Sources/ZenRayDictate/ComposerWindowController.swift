@@ -2,7 +2,7 @@ import AppKit
 import AVFoundation
 import QuartzCore
 
-// Iteration timestamp: 2026-09-11.
+// Iteration timestamp: 2026-09-12.
 final class ComposerWindowController: NSWindowController, NSWindowDelegate {
 
     private let composer = ComposerViewController()
@@ -126,7 +126,7 @@ final class ComposerWindowController: NSWindowController, NSWindowDelegate {
             forContentRect: NSRect(origin: .zero, size: ComposerTokens.windowSize)
         ).size
         window.setFrame(frame, display: true)
-        Log.write("composer frame restored to 860x360 after content resize")
+        Log.write("composer frame restored to 860x140 after content resize")
     }
 
     private func positionAtBottomCenter(_ window: NSWindow) {
@@ -188,7 +188,7 @@ private final class CircularButton: NSButton {
     }
 }
 
-private final class ComposerViewController: NSViewController, NSTextViewDelegate {
+private final class ComposerViewController: NSViewController {
 
     private let capture = AudioCapture()
     private let transcriber = TranscriptionPipeline()
@@ -196,7 +196,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     private let card = ComposerCardView()
     private let editor = ComposerTextView()
     private let editorScroll = ComposerEditorScrollView()
-    private let placeholder = NSTextField(labelWithString: "Ask anything")
     private let waveform = WaveformView()
     private let stateLabel = NSTextField(labelWithString: "Ready")
     private let primaryButton = CircularButton()
@@ -301,7 +300,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         guard state != .recording else { return }
         focusEditor()
         editor.paste(nil)
-        editorDidChange(editor)
         Log.write("pasted text into independent composer")
     }
 
@@ -316,7 +314,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             return
         }
         editor.string = ""
-        editorDidChange(editor)
         state = .idle
         stateLabel.stringValue = "Ready"
         updateActionButton()
@@ -327,7 +324,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
     func clearComposer() {
         guard state != .recording else { return }
         editor.string = ""
-        editorDidChange(editor)
         state = .idle
         stateLabel.stringValue = "Ready"
         updateActionButton()
@@ -360,15 +356,7 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         editor.textContainer?.lineBreakMode = .byCharWrapping
         editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        editor.delegate = self
         editorScroll.documentView = editor
-
-        placeholder.font = editor.font
-        placeholder.textColor = .secondaryLabelColor
-        placeholder.translatesAutoresizingMaskIntoConstraints = false
-        placeholder.isBezeled = false
-        placeholder.isEditable = false
-        placeholder.isSelectable = false
 
         waveform.translatesAutoresizingMaskIntoConstraints = false
         waveform.isActive = false
@@ -389,7 +377,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         progress.translatesAutoresizingMaskIntoConstraints = false
 
         card.addSubview(editorScroll)
-        card.addSubview(placeholder)
         card.addSubview(cancelButton)
         card.addSubview(waveform)
         card.addSubview(stateLabel)
@@ -401,9 +388,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             editorScroll.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -ComposerTokens.contentInset),
             editorScroll.topAnchor.constraint(equalTo: card.topAnchor, constant: ComposerTokens.contentInset),
             editorScroll.bottomAnchor.constraint(equalTo: waveform.topAnchor, constant: -8),
-
-            placeholder.leadingAnchor.constraint(equalTo: editorScroll.leadingAnchor, constant: 4),
-            placeholder.topAnchor.constraint(equalTo: editorScroll.topAnchor, constant: 8),
 
             cancelButton.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: ComposerTokens.contentInset),
             cancelButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -ComposerTokens.contentInset),
@@ -430,7 +414,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
             progress.centerXAnchor.constraint(equalTo: primaryButton.centerXAnchor),
             progress.centerYAnchor.constraint(equalTo: primaryButton.centerYAnchor)
         ])
-        updatePlaceholder()
         updateActionButton()
     }
 
@@ -554,7 +537,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         let current = editor.string
         let separator = current.isEmpty || current.hasSuffix(" ") || current.hasSuffix("\n") ? "" : " "
         editor.string = current + separator + result.text
-        editorDidChange(editor)
         let copied = writeClipboard(editor.string)
         lastClipboardText = editor.string
         pending.clear()
@@ -599,8 +581,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         let durationText = String(format: "%02d:%02d", minutes, remainder)
         stateLabel.stringValue = "Listening · \(durationText)"
     }
-
-    private func updatePlaceholder() { placeholder.isHidden = !editor.string.isEmpty }
 
     @discardableResult
     private func writeClipboard(_ text: String) -> Bool {
@@ -655,9 +635,6 @@ private final class ComposerViewController: NSViewController, NSTextViewDelegate
         }
     }
 
-    func textViewDidChangeSelection(_ notification: Notification) { updatePlaceholder() }
-    func textDidChange(_ notification: Notification) { updatePlaceholder() }
-    func editorDidChange(_ textView: NSTextView) { updatePlaceholder() }
 }
 
 private final class ComposerTextView: NSTextView {

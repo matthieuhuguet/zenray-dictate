@@ -1,4 +1,10 @@
-# ZenRay Dictate
+# ZenRay Dictate V2
+
+V2 released on 2026-09-12. The empty editor no longer overlays a placeholder label, so the insertion bar remains fully visible and cannot cut through the first character.
+
+![ZenRay Dictate V2 component](docs/v2-component.jpg)
+
+[Read the complete V2 patch notes](docs/patch-notes-v2.md).
 
 ZenRay Dictate is a separate macOS app that recreates the useful Codex composer interaction in an independent native window. The installed Codex chat remains its own app and is never embedded or controlled by this project.
 

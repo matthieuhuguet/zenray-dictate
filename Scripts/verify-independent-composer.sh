@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 ./build.sh >/dev/null
 
 test "$(plutil -extract NSMicrophoneUsageDescription raw ZenRayDictate.app/Contents/Info.plist)" != ""
+test "$(plutil -extract CFBundleShortVersionString raw ZenRayDictate.app/Contents/Info.plist)" = "2.0"
+test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "2"
 codesign --verify --deep --strict ZenRayDictate.app
 codesign --display --entitlements :- ZenRayDictate.app 2>/dev/null | grep -q 'com.apple.security.device.audio-input'
 otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'AVFoundation.framework'
@@ -49,6 +51,10 @@ if grep -q 'liveTranscript' Sources/ZenRayDictate/ComposerWindowController.swift
 fi
 if grep -q '\.resizable' Sources/ZenRayDictate/ComposerWindowController.swift; then
     echo "composer window must stay fixed" >&2
+    exit 1
+fi
+if grep -qi 'placeholder' Sources/ZenRayDictate/ComposerWindowController.swift; then
+    echo "placeholder text must stay removed from the composer" >&2
     exit 1
 fi
 echo "independent composer verification passed"

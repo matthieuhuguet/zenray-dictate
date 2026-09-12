@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZenRay Dictate V2 component</title>
+  <style>
+    :root {
+      --page-background: #e9edf2;
+      --card-background: rgba(250, 250, 250, 0.98);
+      --card-border: rgba(0, 0, 0, 0.12);
+      --primary-ink: #191919;
+      --secondary-ink: #767676;
+      --button-muted: rgba(120, 120, 120, 0.16);
+      --waveform-ink: rgba(95, 95, 95, 0.34);
+      --card-radius: 24px;
+      --button-size: 36px;
+      --content-inset: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: var(--page-background);
+      color: var(--primary-ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+    }
+
+    .artboard {
+      width: 980px;
+      height: 220px;
+      padding: 28px 60px;
+      background: linear-gradient(145deg, #f4f7fa, #dfe6ee);
+    }
+
+    .version {
+      height: 20px;
+      color: #6d7783;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      line-height: 20px;
+      text-transform: uppercase;
+    }
+
+    .composer {
+      position: relative;
+      width: 860px;
+      height: 140px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      border-radius: var(--card-radius);
+      background: var(--card-background);
+      box-shadow: 0 18px 36px rgba(40, 52, 68, 0.18);
+    }
+
+    .prompt {
+      position: absolute;
+      top: var(--content-inset);
+      right: var(--content-inset);
+      left: var(--content-inset);
+      height: 60px;
+      overflow: hidden;
+    }
+
+    .prompt-line {
+      position: relative;
+      height: 23px;
+      color: var(--secondary-ink);
+      font-size: 20px;
+      line-height: 23px;
+    }
+
+    .caret {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 2px;
+      height: 23px;
+      border-radius: 1px;
+      background: var(--primary-ink);
+    }
+
+    .waveform {
+      position: absolute;
+      right: 70px;
+      bottom: 21px;
+      left: 70px;
+      display: flex;
+      height: 32px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .waveform span {
+      width: 4px;
+      min-height: 3px;
+      border-radius: 999px;
+      background: var(--waveform-ink);
+    }
+
+    .status {
+      position: absolute;
+      right: 70px;
+      bottom: 3px;
+      left: 70px;
+      height: 16px;
+      color: var(--secondary-ink);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 16px;
+      text-align: center;
+    }
+
+    .button {
+      position: absolute;
+      bottom: var(--content-inset);
+      display: grid;
+      width: var(--button-size);
+      height: var(--button-size);
+      padding: 0;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+    }
+
+    .cancel {
+      left: var(--content-inset);
+      background: var(--button-muted);
+    }
+
+    .primary {
+      right: var(--content-inset);
+      background: var(--primary-ink);
+    }
+
+    .cancel svg {
+      width: 15px;
+      height: 15px;
+      stroke: var(--primary-ink);
+      stroke-linecap: round;
+      stroke-width: 2;
+    }
+
+    .primary svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: #fff;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <main class="artboard">
+    <div class="version">ZenRay Dictate V2</div>
+    <section class="composer" aria-label="ZenRay Dictate V2 composer">
+      <div class="prompt">
+        <div class="prompt-line">
+          <span class="caret" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <div class="waveform" aria-hidden="true">
+        <span style="height:3px"></span><span style="height:3px"></span><span style="height:4px"></span><span style="height:3px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:5px"></span><span style="height:4px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:4px"></span>
+        <span style="height:3px"></span><span style="height:5px"></span><span style="height:8px"></span><span style="height:5px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:4px"></span>
+        <span style="height:3px"></span><span style="height:5px"></span><span style="height:10px"></span><span style="height:6px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:7px"></span><span style="height:5px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:4px"></span>
+        <span style="height:3px"></span><span style="height:5px"></span><span style="height:8px"></span><span style="height:5px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:4px"></span>
+        <span style="height:3px"></span><span style="height:5px"></span><span style="height:9px"></span><span style="height:6px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:4px"></span>
+        <span style="height:3px"></span><span style="height:5px"></span><span style="height:8px"></span><span style="height:5px"></span>
+        <span style="height:3px"></span><span style="height:4px"></span><span style="height:6px"></span><span style="height:4px"></span>
+      </div>
+
+      <div class="status">Ready</div>
+
+      <div class="button cancel" aria-label="Clear text">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
+      </div>
+      <div class="button primary" aria-label="Start dictation">
+        <svg viewBox="0 0 18 18" aria-hidden="true">
+          <rect x="6" y="2" width="6" height="9" rx="3" />
+          <path d="M3.5 8.5a5.5 5.5 0 0 0 11 0M9 14v2M6 16h6" />
+        </svg>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

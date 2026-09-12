@@ -1,7 +1,7 @@
 {
-  "task": "Keep the independent composer fixed while restoring complete text input and clipboard controls",
-  "status": "complete",
-  "updated_at": "2026-09-11 17:10 Europe/Paris",
+  "task": "Release ZenRay Dictate V2 with a stable caret-only empty editor",
+  "status": "in_progress",
+  "updated_at": "2026-09-12 10:50 Europe/Paris",
   "completed": [
     "Removed the embedded web composer and its JavaScript bridge",
     "Removed the web transcription endpoint and browser recording retry layer",
@@ -30,7 +30,12 @@
     "Verified a long unbroken prompt at 860 by 360 points with one remaining static text control",
     "Verified a real paste action inserted 22 characters and a real Codex retry inserted 138 characters then copied 140 characters",
     "Positioned the composer at the bottom center of NSScreen.visibleFrame with a 24 point bottom inset",
-    "Made both action buttons 38 by 38 points at runtime and drew their circular backgrounds explicitly inside square bounds"
+    "Made both action buttons 38 by 38 points at runtime and drew their circular backgrounds explicitly inside square bounds",
+    "Removed the Ask anything overlay so the native caret cannot cut through its first letter",
+    "Bumped the application bundle to version 2.0, build 2",
+    "Rendered the V2 component from HTML to docs/v2-component.jpg at 1960 by 440 pixels",
+    "Wrote precise V2 patch notes covering the caret fix, layout, controls, transcription, and retry memory",
+    "Verified the V2 runtime window at 860 by 140 points and buttons at 38 by 38 points"
   ],
-  "next": "Use the independent composer normally while keeping the Codex chat open separately."
+  "next": "Push the V2 commit and v2.0.0 tag to the zenray-dictate GitHub repository."
 }

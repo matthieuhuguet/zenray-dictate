@@ -6,6 +6,8 @@ cd "$(dirname "$0")"
 
 APP="ZenRayDictate.app"
 BUNDLE_ID="com.zenray.dictate"
+APP_VERSION="2.0"
+APP_BUILD="2"
 
 echo "==> Compiling"
 swift build -c release --arch arm64
@@ -32,8 +34,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key>          <string>AppIcon</string>
     <key>CFBundleIdentifier</key>        <string>$BUNDLE_ID</string>
     <key>CFBundlePackageType</key>       <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
-    <key>CFBundleVersion</key>           <string>1</string>
+    <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
+    <key>CFBundleVersion</key>           <string>$APP_BUILD</string>
     <key>LSMinimumSystemVersion</key>    <string>14.0</string>
     <key>NSHighResolutionCapable</key>   <true/>
     <key>NSMicrophoneUsageDescription</key>
