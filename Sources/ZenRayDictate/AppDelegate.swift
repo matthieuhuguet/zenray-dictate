@@ -6,6 +6,9 @@ import Carbon.HIToolbox
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let composer = ComposerWindowController(window: nil)
+    // 3 October 2026, 21:52 CEST: explicit local modes retain their native path without opening Gemini.
+    private var usesWebComposer: Bool { let preferences=DictationLibrary.shared.document.preferences; return !preferences.localOnly && preferences.engine == .gemini }
+    private func showDefaultComposer() { if usesWebComposer { TranscriptionPipeline.showComposer() } else { composer.show() } }
     // 3 October 2026, 16:15 CEST: configurable direct dictation complements the preserved native composer.
     private var dictateHotKey: GlobalHotKey?
     private let flow = DictationCoordinator()
@@ -32,25 +35,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMainMenu()
         buildStatusItem()
         LoginItem.enable()
-        TranscriptionPipeline.showComposer()
+        showDefaultComposer()
 
         configureDictationShortcut()
         commandHotKey.onPress = { [weak self] in self?.flow.beginCommand() }
         commandHotKey.onRelease = { [weak self] in self?.flow.endCommand() }
         commandHotKey.register()
-        legacyDictateHotKey.onPress = { [weak self] in TranscriptionPipeline.toggleLive() }
+        legacyDictateHotKey.onPress = { [weak self] in guard let self else { return }; if self.usesWebComposer { TranscriptionPipeline.toggleLive() } else { self.composer.toggleDictation() } }
         legacyDictateHotKey.register()
-        cancelHotKey.onPress = { [weak self] in self?.flow.cancel(); self?.composer.cancelRecording(); TranscriptionPipeline.cancelLive() }
+        cancelHotKey.onPress = { [weak self] in self?.flow.cancel(); self?.composer.cancelRecording(); if self?.usesWebComposer == true { TranscriptionPipeline.cancelLive() } }
         cancelHotKey.register()
 
         fnKey.onPress = { [weak self] in
-            if DictationLibrary.shared.document.preferences.fnPushToTalk { TranscriptionPipeline.startLive() }
-            else { TranscriptionPipeline.showComposer() }
+            guard let self else { return }
+            if DictationLibrary.shared.document.preferences.fnPushToTalk { if self.usesWebComposer { TranscriptionPipeline.startLive() } else { self.flow.pressFn() } }
+            else { self.showDefaultComposer() }
         }
         fnKey.onRelease = { [weak self] in
-            if DictationLibrary.shared.document.preferences.fnPushToTalk { TranscriptionPipeline.stopLive() }
+            guard let self else { return }
+            if DictationLibrary.shared.document.preferences.fnPushToTalk { if self.usesWebComposer { TranscriptionPipeline.stopLive() } else { self.flow.releaseFn() } }
         }
-        fnKey.onHandsFree = { TranscriptionPipeline.liveHandsFree() }
+        fnKey.onHandsFree = { [weak self] in guard let self else { return }; if self.usesWebComposer { TranscriptionPipeline.liveHandsFree() } else { self.flow.fnSpace() } }
         let fnStarted = fnKey.start()
         Log.write("Fn visibility monitor started: \(fnStarted)")
         if !fnStarted {
@@ -156,15 +161,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dictateHotKey?.unregister()
         let preferences = DictationLibrary.shared.document.preferences
         let shortcut = GlobalHotKey(keyCode:preferences.shortcutKeyCode,modifiers:preferences.shortcutModifiers,description:"Custom dictation shortcut")
-        shortcut.onPress = { [weak self] in TranscriptionPipeline.toggleLive() }
+        shortcut.onPress = { [weak self] in self?.toggleFlow() }
         if !shortcut.register() { Log.write("Configured dictation shortcut is unavailable; Fn remains available.") }
         dictateHotKey = shortcut
     }
     @objc private func showLibrary() { libraryWindow.show(coordinator:flow) { [weak self] in self?.configureDictationShortcut() } }
-    @objc private func toggleFlow() { TranscriptionPipeline.toggleLive() }
+    @objc private func toggleFlow() { if usesWebComposer { TranscriptionPipeline.toggleLive() } else { flow.toggleHandsFree() } }
     @objc private func toggleCommandMode() { flow.toggleCommand() }
     @objc private func retryFlow() { flow.retry() }
-    @objc private func showComposer() { TranscriptionPipeline.showComposer() }
+    @objc private func showComposer() { showDefaultComposer() }
     @objc private func showNativeComposer() { composer.show() }
     @objc private func clearComposer() { composer.clearComposer() }
     @objc private func copyComposer() { composer.copyComposerText() }
@@ -179,7 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Clicking the Dock icon while the window is hidden must bring it back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        TranscriptionPipeline.showComposer()
+        showDefaultComposer()
         return true
     }
 
