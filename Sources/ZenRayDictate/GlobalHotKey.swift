@@ -10,7 +10,9 @@ import Carbon.HIToolbox
 /// that is not already load bearing elsewhere.
 final class GlobalHotKey {
 
+    // 3 October 2026, 16:18 CEST: Command Mode uses key release to complete a held instruction.
     var onPress: (() -> Void)?
+    var onRelease: (() -> Void)?
 
     private var ref: EventHotKeyRef?
     private var handler: EventHandlerRef?
@@ -43,10 +45,10 @@ final class GlobalHotKey {
         unregister()
         Self.instances[id] = self
 
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
+        var eventTypes = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))
+        ]
 
         let callback: EventHandlerUPP = { _, event, _ in
             var hotKeyID = EventHotKeyID()
@@ -55,12 +57,13 @@ final class GlobalHotKey {
                 nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID
             )
             if let instance = GlobalHotKey.instances[hotKeyID.id] {
-                DispatchQueue.main.async { instance.onPress?() }
+                let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
+                DispatchQueue.main.async { if released { instance.onRelease?() } else { instance.onPress?() } }
             }
             return noErr
         }
 
-        InstallEventHandler(GetApplicationEventTarget(), callback, 1, &eventType, nil, &handler)
+        InstallEventHandler(GetApplicationEventTarget(), callback, 2, &eventTypes, nil, &handler)
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x5A52_4459), id: id)  // 'ZRDY'
         let status = RegisterEventHotKey(

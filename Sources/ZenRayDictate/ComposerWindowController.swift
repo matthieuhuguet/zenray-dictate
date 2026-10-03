@@ -2,7 +2,7 @@ import AppKit
 import AVFoundation
 import QuartzCore
 
-// Iteration timestamp: 2026-09-12.
+// Iteration timestamp: 2026-09-15 16:05.
 final class ComposerWindowController: NSWindowController, NSWindowDelegate {
 
     private let composer = ComposerViewController()
@@ -153,7 +153,8 @@ private enum ComposerTokens {
     static let fadeDuration: TimeInterval = 0.16
     static let cardRadius: CGFloat = 24
     static let contentInset: CGFloat = 18
-    static let editorFontSize: CGFloat = 20
+    // Updated 2026-09-18 19:03 CEST: use the requested 18px composer text.
+    static let editorFontSize: CGFloat = 18
     static let iconPointSize: CGFloat = 15
     static let buttonSize: CGFloat = 36
     static let waveformBars = 56
@@ -215,7 +216,7 @@ private final class ComposerViewController: NSViewController {
         capture.onDuration = { [weak self] duration in self?.updateDuration(duration) }
         if let saved = pending.existingURL() {
             state = .failed("A recording is ready to retry")
-            stateLabel.stringValue = "Recording ready to retry"
+            stateLabel.stringValue = "Recording saved · record again"
             updateActionButton()
             Log.write("pending recording restored: \(saved.lastPathComponent)")
         }
@@ -235,11 +236,7 @@ private final class ComposerViewController: NSViewController {
         case .idle:
             startDictation()
         case .failed:
-            if pending.existingURL() != nil {
-                retryPendingRecording()
-            } else {
-                startDictation()
-            }
+            startDictation()
         case .recording:
             stopDictation()
         case .transcribing:
@@ -257,7 +254,7 @@ private final class ComposerViewController: NSViewController {
     }
 
     func retryPendingRecording() {
-        guard state != .recording, let url = pending.existingURL() else {
+        guard state != .recording, state != .transcribing, let url = pending.existingURL() else {
             Log.write("retry ignored: no pending recording")
             return
         }
@@ -525,7 +522,15 @@ private final class ComposerViewController: NSViewController {
             do {
                 let result = try await self?.transcriber.transcribe(audioURL: savedURL)
                 guard let self, let result else { return }
-                await MainActor.run { self.finishTranscription(result) }
+                let library = DictationLibrary.shared
+                let mode = library.mode(for:"")
+                var text = library.normalize(result.text)
+                if !library.document.preferences.localOnly, !mode.prompt.isEmpty {
+                    text = try await TranscriptionPipeline.rewrite(text,instruction:mode.prompt + "\nTone: " + mode.tone,model:library.document.preferences.model)
+                }
+                try library.record(raw:result.text,text:text,provider:result.provider,mode:mode.id,application:"ZenRayDictate composer",audioURL:savedURL,inserted:true)
+                let formatted = TranscriptionResult(text:text,provider:result.provider)
+                await MainActor.run { self.finishTranscription(formatted) }
             } catch {
                 guard let self else { return }
                 await MainActor.run { self.failTranscription(error) }
@@ -554,7 +559,7 @@ private final class ComposerViewController: NSViewController {
 
     private func failTranscription(_ error: Error) {
         state = .failed("Saved for retry")
-        stateLabel.stringValue = "Saved for retry"
+        stateLabel.stringValue = "No transcript · record again"
         progress.stopAnimation(nil)
         updateActionButton()
         Log.write("independent transcription failed and was saved: \(error.localizedDescription)")
@@ -610,8 +615,8 @@ private final class ComposerViewController: NSViewController {
             cancelButton.setAccessibilityLabel("Clear text")
             primaryButton.isEnabled = false
         case .failed:
-            primaryButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Retry transcription")
-            primaryButton.toolTip = "Retry transcription"
+            primaryButton.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Record again")
+            primaryButton.toolTip = "Record again"
             cancelButton.toolTip = "Clear text"
             cancelButton.setAccessibilityLabel("Clear text")
             primaryButton.isEnabled = true
@@ -627,12 +632,7 @@ private final class ComposerViewController: NSViewController {
     }
 
     @objc private func primaryPressed() {
-        switch state {
-        case .failed:
-            retryPendingRecording()
-        default:
-            toggleDictation()
-        }
+        toggleDictation()
     }
 
 }
@@ -738,7 +738,7 @@ private final class ComposerCardView: NSView {
     }
 }
 
-private final class WaveformView: NSView {
+final class WaveformView: NSView {
     var isActive = false { didSet { needsDisplay = true } }
     private var levels = Array(repeating: CGFloat(0.08), count: ComposerTokens.waveformBars)
 
@@ -781,6 +781,10 @@ private final class PendingRecordingStore {
 
     func existingURL() -> URL? {
         guard fileManager.fileExists(atPath: pendingURL.path) else { return nil }
+        guard let recording = try? AVAudioFile(forReading: pendingURL), recording.length > 0 else {
+            Log.write("pending recording has no audio; a new dictation can start")
+            return nil
+        }
         return pendingURL
     }
 
@@ -790,10 +794,27 @@ private final class PendingRecordingStore {
         if url.standardizedFileURL == pendingURL.standardizedFileURL {
             return pendingURL
         }
+        let stagedURL = pendingDirectory.appendingPathComponent("incoming-\(UUID().uuidString).wav")
+        try fileManager.copyItem(at: url, to: stagedURL)
+        defer { try? fileManager.removeItem(at: stagedURL) }
+        var archiveURL: URL?
         if fileManager.fileExists(atPath: pendingURL.path) {
-            try fileManager.removeItem(at: pendingURL)
+            let previousURL = pendingDirectory.appendingPathComponent("previous-\(UUID().uuidString).wav")
+            try fileManager.moveItem(at: pendingURL, to: previousURL)
+            archiveURL = previousURL
         }
-        try fileManager.copyItem(at: url, to: pendingURL)
+        do {
+            try fileManager.moveItem(at: stagedURL, to: pendingURL)
+        } catch {
+            if let archiveURL {
+                do {
+                    try fileManager.moveItem(at: archiveURL, to: pendingURL)
+                } catch {
+                    Log.write("previous pending recording remains archived: \(archiveURL.lastPathComponent)")
+                }
+            }
+            throw error
+        }
         return pendingURL
     }
 

@@ -7,13 +7,16 @@ cd "$(dirname "$0")/.."
 ./build.sh >/dev/null
 
 test "$(plutil -extract NSMicrophoneUsageDescription raw ZenRayDictate.app/Contents/Info.plist)" != ""
-test "$(plutil -extract CFBundleShortVersionString raw ZenRayDictate.app/Contents/Info.plist)" = "2.0"
-test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "2"
+test "$(plutil -extract CFBundleShortVersionString raw ZenRayDictate.app/Contents/Info.plist)" = "3.0"
+test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "3"
 codesign --verify --deep --strict ZenRayDictate.app
 codesign --display --entitlements :- ZenRayDictate.app 2>/dev/null | grep -q 'com.apple.security.device.audio-input'
 otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'AVFoundation.framework'
-if otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'WebKit.framework'; then
-    echo "WebKit must not be linked" >&2
+# 3 October 2026, 15:52 CEST: WebKit now runs Gemini; the composer stays native.
+otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'WebKit.framework'
+test -s ZenRayDictate.app/Contents/Resources/GeminiBridge.js
+if rg -q 'chatgpt.com|backend-api/transcribe|CodexTranscriber' Sources; then
+    echo "Old ChatGPT transport remains" >&2
     exit 1
 fi
 grep -q 'kVK_ANSI_D' Sources/ZenRayDictate/AppDelegate.swift

@@ -6,8 +6,8 @@ cd "$(dirname "$0")"
 
 APP="ZenRayDictate.app"
 BUNDLE_ID="com.zenray.dictate"
-APP_VERSION="2.0"
-APP_BUILD="2"
+APP_VERSION="3.0"
+APP_BUILD="3"
 
 echo "==> Compiling"
 swift build -c release --arch arm64
@@ -19,6 +19,13 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN" "$APP/Contents/MacOS/ZenRayDictate"
+# 3 October 2026, 15:52 CEST: bundle the website bridge with the signed application.
+cp Sources/ZenRayDictate/Resources/GeminiBridge.js "$APP/Contents/Resources/"
+# 3 October 2026, 19:55 CEST: ship the font drawings used by the native interface.
+mkdir -p "$APP/Contents/Resources/Fonts"
+for FONT_FILE in InterVariable.ttf AnthropicSerif-Regular.ttf AnthropicMono-Regular.ttf; do
+    cp "$HOME/Library/Fonts/$FONT_FILE" "$APP/Contents/Resources/Fonts/"
+done
 if [[ -f AppIcon.icns ]]; then
     cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi

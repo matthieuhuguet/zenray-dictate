@@ -8,9 +8,11 @@ let package = Package(
         .executableTarget(
             name: "ZenRayDictate",
             path: "Sources/ZenRayDictate",
+            exclude: ["Resources"],
             linkerSettings: [
                 .linkedFramework("AVFoundation")
             ]
-        )
+        ),
+        .testTarget(name: "ZenRayDictateTests", dependencies: ["ZenRayDictate"], path: "Tests/ZenRayDictateTests")
     ]
 )

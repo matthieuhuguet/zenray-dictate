@@ -2,14 +2,15 @@ import AppKit
 import Carbon.HIToolbox
 
 // Iteration timestamp: 2026-09-11.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let composer = ComposerWindowController(window: nil)
-    private let dictateHotKey = GlobalHotKey(
-        keyCode: UInt32(kVK_ANSI_D),
-        modifiers: UInt32(controlKey),
-        description: "⌃D"
-    )
+    // 3 October 2026, 16:15 CEST: configurable direct dictation complements the preserved native composer.
+    private var dictateHotKey: GlobalHotKey?
+    private let flow = DictationCoordinator()
+    private let libraryWindow = LibraryWindow()
+    private let commandHotKey = GlobalHotKey(keyCode:UInt32(kVK_ANSI_D),modifiers:UInt32(controlKey | shiftKey),description:"⌃⇧D")
     private let legacyDictateHotKey = GlobalHotKey(
         keyCode: UInt32(kVK_ANSI_D),
         modifiers: UInt32(cmdKey),
@@ -30,17 +31,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LoginItem.enable()
         composer.show()
 
-        dictateHotKey.onPress = { [weak self] in self?.composer.toggleDictation() }
-        dictateHotKey.register()
+        configureDictationShortcut()
+        commandHotKey.onPress = { [weak self] in self?.flow.beginCommand() }
+        commandHotKey.onRelease = { [weak self] in self?.flow.endCommand() }
+        commandHotKey.register()
         legacyDictateHotKey.onPress = { [weak self] in self?.composer.toggleDictation() }
         legacyDictateHotKey.register()
-        cancelHotKey.onPress = { [weak self] in self?.composer.cancelRecording() }
+        cancelHotKey.onPress = { [weak self] in self?.flow.cancel(); self?.composer.cancelRecording() }
         cancelHotKey.register()
 
         fnKey.onPress = { [weak self] in
-            Log.write("Fn press received")
-            self?.composer.toggleVisibility()
+            if DictationLibrary.shared.document.preferences.fnPushToTalk { self?.flow.pressFn() }
+            else { self?.composer.toggleVisibility() }
         }
+        fnKey.onRelease = { [weak self] in
+            if DictationLibrary.shared.document.preferences.fnPushToTalk { self?.flow.releaseFn() }
+        }
+        fnKey.onHandsFree = { [weak self] in self?.flow.fnSpace() }
         let fnStarted = fnKey.start()
         Log.write("Fn visibility monitor started: \(fnStarted)")
         if !fnStarted {
@@ -50,9 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     timer.invalidate()
                     return
                 }
-                guard self.fnKey.start() else { return }
-                timer.invalidate()
-                Log.write("Fn visibility monitor started after Accessibility grant")
+                Task { @MainActor in
+                    guard self.fnKey.start() else { return }
+                    timer.invalidate()
+                    Log.write("Fn visibility monitor started after Accessibility grant")
+                }
             }
         }
 
@@ -73,6 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: "ZenRayDictate")
         appMenu.addItem(withTitle: "About ZenRayDictate", action: nil, keyEquivalent: "")
+        appMenu.addItem(.separator())
+        add(appMenu, "Library, History and Settings", #selector(showLibrary))
+        add(appMenu, "Gemini session / Sign in", #selector(showGeminiSession))
         appMenu.addItem(.separator())
         appMenu.addItem(
             withTitle: "Quit ZenRayDictate",
@@ -98,14 +110,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "⌃D or ⌘D starts/stops, ⌃Q cancels, ⌘X cuts all, ⌘Q clears, Fn shows/hides",
+            title: "Hold Fn to dictate; double Fn or Fn+Space hands-free; hold ⌃⇧D for commands; ⌘D composer",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
         menu.addItem(hint)
         menu.addItem(.separator())
 
+        add(menu, "Library, History and Settings", #selector(showLibrary))
+        add(menu, "Hands-free dictation", #selector(toggleFlow))
+        add(menu, "Command Mode", #selector(toggleCommandMode))
+        add(menu, "Retry capsule recording", #selector(retryFlow))
         add(menu, "Show composer", #selector(showComposer))
+        add(menu, "Gemini session / Sign in", #selector(showGeminiSession))
         add(menu, "Retry last recording", #selector(retryRecording))
         add(menu, "Copy composer text", #selector(copyComposer))
         add(menu, "Paste into composer", #selector(pasteComposer))
@@ -129,6 +146,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item)
     }
 
+    // 3 October 2026, 15:52 CEST: login belongs to the app session, independent of the personal browser.
+    @objc private func showGeminiSession() { Task { @MainActor in TranscriptionPipeline.showGemini() } }
+    private func configureDictationShortcut() {
+        dictateHotKey?.unregister()
+        let preferences = DictationLibrary.shared.document.preferences
+        let shortcut = GlobalHotKey(keyCode:preferences.shortcutKeyCode,modifiers:preferences.shortcutModifiers,description:"Custom dictation shortcut")
+        shortcut.onPress = { [weak self] in self?.flow.toggleHandsFree() }
+        if !shortcut.register() { Log.write("Configured dictation shortcut is unavailable; Fn remains available.") }
+        dictateHotKey = shortcut
+    }
+    @objc private func showLibrary() { libraryWindow.show(coordinator:flow) { [weak self] in self?.configureDictationShortcut() } }
+    @objc private func toggleFlow() { flow.toggleHandsFree() }
+    @objc private func toggleCommandMode() { flow.toggleCommand() }
+    @objc private func retryFlow() { flow.retry() }
     @objc private func showComposer() { composer.show() }
     @objc private func clearComposer() { composer.clearComposer() }
     @objc private func copyComposer() { composer.copyComposerText() }
@@ -152,7 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        dictateHotKey.unregister()
+        dictateHotKey?.unregister()
+        commandHotKey.unregister()
         legacyDictateHotKey.unregister()
         cancelHotKey.unregister()
         fnKey.stop()

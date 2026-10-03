@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-// Iteration timestamp: 2026-09-11.
+// Iteration timestamp: 2026-09-15 09:00.
 final class AudioCapture: NSObject {
 
     enum CaptureError: LocalizedError {
@@ -21,6 +21,8 @@ final class AudioCapture: NSObject {
         }
     }
 
+    // 3 October 2026, 16:10 CEST: normalize capture to 16 kHz mono and expose whisper gain.
+    var gain: Float = 1
     var onLevel: ((Float) -> Void)?
     var onDuration: ((TimeInterval) -> Void)?
 
@@ -39,7 +41,7 @@ final class AudioCapture: NSObject {
         )[0]
         captureDirectory = supportDirectory
             .appendingPathComponent("ZenRayDictate", isDirectory: true)
-            .appendingPathComponent("Captures", isDirectory: true)
+            .appendingPathComponent("Library/Pending", isDirectory: true)
         super.init()
     }
 
@@ -59,10 +61,12 @@ final class AudioCapture: NSObject {
 
         try fileManager.createDirectory(at: captureDirectory, withIntermediateDirectories: true)
         let url = captureDirectory.appendingPathComponent("capture-\(UUID().uuidString).wav")
+        guard let outputFormat = AVAudioFormat(commonFormat:.pcmFormatFloat32,sampleRate:16_000,channels:1,interleaved:false),
+              let converter = AVAudioConverter(from:inputFormat,to:outputFormat) else { throw CaptureError.inputUnavailable }
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: inputFormat.sampleRate,
-            AVNumberOfChannelsKey: inputFormat.channelCount,
+            AVSampleRateKey: outputFormat.sampleRate,
+            AVNumberOfChannelsKey: outputFormat.channelCount,
             AVLinearPCMBitDepthKey: 16,
             AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
@@ -73,7 +77,18 @@ final class AudioCapture: NSObject {
         inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { [weak self] buffer, _ in
             guard let self else { return }
             do {
-                try file.write(from: buffer)
+                let count = AVAudioFrameCount(ceil(Double(buffer.frameLength) * outputFormat.sampleRate / inputFormat.sampleRate)) + 32
+                guard let converted = AVAudioPCMBuffer(pcmFormat:outputFormat,frameCapacity:count) else { return }
+                var used = false; var conversionError: NSError?
+                converter.convert(to:converted,error:&conversionError) { _, status in
+                    if used { status.pointee = .noDataNow; return nil }
+                    used = true; status.pointee = .haveData; return buffer
+                }
+                if let conversionError { throw conversionError }
+                if self.gain != 1, let samples = converted.floatChannelData?[0] {
+                    for index in 0..<Int(converted.frameLength) { samples[index] = min(1,max(-1,samples[index]*self.gain)) }
+                }
+                try file.write(from: converted)
             } catch {
                 Log.write("audio capture write failed: \(error.localizedDescription)")
             }
@@ -116,7 +131,7 @@ final class AudioCapture: NSObject {
         startedAt = nil
         currentURL = nil
 
-        guard fileManager.fileExists(atPath: url.path), fileSize(of: url) > 44 else {
+        guard let recording = try? AVAudioFile(forReading: url), recording.length > 0 else {
             Log.write("independent audio capture stopped without audio")
             return nil
         }

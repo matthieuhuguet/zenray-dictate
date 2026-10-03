@@ -37,5 +37,26 @@
     "Wrote precise V2 patch notes covering the caret fix, layout, controls, transcription, and retry memory",
     "Verified the V2 runtime window at 860 by 140 points and buttons at 38 by 38 points"
   ],
-  "next": "Use the independent composer normally while keeping the Codex chat open separately."
+  "next": "Use the independent composer normally while keeping the Codex chat open separately.",
+  "currentWork": {
+    "updatedAt": "3 October 2026",
+    "objective": "Gemini website backend, native capsule, Wispr-style dictation library and Assets cloud mapping",
+    "sessionId": "01a10202-a5c2-7942-9ec6-be571d28506f",
+    "status": "implemented-and-cloud-verified",
+    "verified": [
+      "Sequential Gemini website dictation and text cleanup",
+      "Native audio import and history replay, active mode unchanged",
+      "Offline Whisper French and installed Parakeet Japanese",
+      "Ten library tests",
+      "Bridge rejection checks",
+      "Signed version 3.0 bundle and preserved native composer"
+    ],
+    "next": "Physical Fn and insertion validation in target applications",
+    "limitations": [
+      "Physical Fn press/release on user keyboard",
+      "Automatic paste and clipboard restoration in every target app",
+      "Full-screen OCR (accessible window labels are supported instead)"
+    ],
+    "cloudProof": "/Users/zenray/.claude/tmp/tmp-zenray-dictate/CloudMappingProof.json"
+  }
 }

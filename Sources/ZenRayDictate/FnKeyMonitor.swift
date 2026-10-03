@@ -5,7 +5,11 @@ import CoreGraphics
 /// Watches the Fn key system wide and fires once per press.
 final class FnKeyMonitor {
 
+    // 3 October 2026, 16:10 CEST: release and Fn+Space complete push-to-talk and hands-free triggers.
     var onPress: (() -> Void)?
+    var onRelease: (() -> Void)?
+    var onHandsFree: (() -> Void)?
+    private var spacePressed = false
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -23,7 +27,7 @@ final class FnKeyMonitor {
         stop()
         guard AXIsProcessTrusted() else { return false }
 
-        let mask = (1 << CGEventType.flagsChanged.rawValue)
+        let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let monitor = Unmanaged<FnKeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
@@ -33,13 +37,18 @@ final class FnKeyMonitor {
                 return Unmanaged.passUnretained(event)
             }
 
+            if type == .keyDown, event.flags.contains(.maskSecondaryFn), event.getIntegerValueField(.keyboardEventKeycode) == 49 {
+                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 { monitor.spacePressed = true; DispatchQueue.main.async { monitor.onHandsFree?() } }
+            }
             if type == .flagsChanged {
                 let isDown = event.flags.contains(.maskSecondaryFn)
                 if isDown && !monitor.wasDown {
                     monitor.wasDown = true
                     DispatchQueue.main.async { monitor.onPress?() }
-                } else if !isDown {
+                } else if !isDown && monitor.wasDown {
                     monitor.wasDown = false
+                    if !monitor.spacePressed { DispatchQueue.main.async { monitor.onRelease?() } }
+                    monitor.spacePressed = false
                 }
             }
             return Unmanaged.passUnretained(event)
