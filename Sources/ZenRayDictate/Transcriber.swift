@@ -33,6 +33,13 @@ final class TranscriptionPipeline {
     private let local = LocalWhisperTranscriber()
 
     @MainActor static func showGemini() { gemini.showSession() }
+    // 3 October 2026, 21:35 CEST: default interaction goes directly to Gemini's live composer.
+    @MainActor static func showComposer() { gemini.showComposer() }
+    @MainActor static func startLive() { gemini.pressFn() }
+    @MainActor static func stopLive() { gemini.releaseFn() }
+    @MainActor static func toggleLive() { gemini.toggleLiveMicrophone() }
+    @MainActor static func liveHandsFree() { gemini.fnSpace() }
+    @MainActor static func cancelLive() { gemini.cancelLiveMicrophone() }
 
     @MainActor static func rewrite(_ text: String, instruction: String, model: String) async throws -> String {
         try await gemini.rewrite(text, instruction: instruction, model: model)

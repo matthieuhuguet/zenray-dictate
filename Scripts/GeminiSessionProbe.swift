@@ -14,6 +14,10 @@ final class Probe: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessage
             let source = try! String(contentsOfFile: "Sources/ZenRayDictate/Resources/GeminiBridge.js", encoding:.utf8)
             configuration.userContentController.add(self, name: "dictation")
             configuration.userContentController.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            if ["--inspect","--waveform"].contains(CommandLine.arguments[1]) {
+                let composer = try! String(contentsOfFile:"Sources/ZenRayDictate/Resources/GeminiComposer.js",encoding:.utf8)
+                configuration.userContentController.addUserScript(WKUserScript(source:composer,injectionTime:.atDocumentStart,forMainFrameOnly:true))
+            }
             configuration.mediaTypesRequiringUserActionForPlayback = []
         }
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 740), configuration: configuration)
@@ -30,6 +34,19 @@ final class Probe: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessage
             self.web.evaluateJavaScript("Boolean(window.ZenRayGemini?.ready())") { value,error in
                 guard value as? Bool == true, !sent, CommandLine.arguments.count > 1 else { return }
                 sent = true; timer.invalidate()
+                // 3 October 2026, 21:32 CEST: inspect only the composer structure, excluding chat contents.
+                if CommandLine.arguments[1] == "--waveform" {
+                    self.window.orderFrontRegardless()
+                    let audio = try! Data(contentsOf:URL(fileURLWithPath:"/Users/zenray/.claude/tmp/tmp-zenray-dictate/GeminiWitness.wav"))
+                    self.web.callAsyncJavaScript("window.ZenRayComposer.setCompact(true);window.ZenRayGemini.transcribe(payload);await new Promise(r=>setTimeout(r,900));const root=document.querySelector('input-container');return JSON.stringify({state:window.ZenRayComposer.state(),footerHidden:getComputedStyle(root.querySelector('hallucination-disclaimer')).display==='none',capsuleHeight:root.querySelector('.input-area').getBoundingClientRect().height,recordingElements:[...root.querySelectorAll('*')].filter(e=>/wave|speech|audio|record|listening|animation/i.test(e.tagName+' '+e.className)).map(e=>({tag:e.tagName,classes:e.className,height:e.getBoundingClientRect().height})),addedCanvas:!!root.querySelector('.zenray-waveform')})",arguments:["payload":["id":"waveform","audio":audio.base64EncodedString(),"responseTimeoutMs":45000]],in:nil,in:.page) { result in
+                        switch result { case .success(let value): print(value);fflush(stdout); case .failure(let error):print(error);fflush(stdout);exit(1) }
+                    }
+                    return
+                }
+                if CommandLine.arguments[1] == "--inspect" {
+                    self.web.evaluateJavaScript("window.ZenRayComposer.setCompact(true); JSON.stringify({state:window.ZenRayComposer.state(),footer:(()=>{let e=document.querySelector('input-container a[href*=\"policies.google.com\"]');let a=[];while(e&&a.length<6){a.push({tag:e.tagName,classes:e.className});e=e.parentElement;}return a;})(),structure:(()=>{let e=document.querySelector('[role= textbox][contenteditable=true]');let a=[];while(e&&a.length<12){a.push({tag:e.tagName,classes:e.className,height:e.getBoundingClientRect().height});e=e.parentElement;}return a;})()})") { value,error in print(value ?? error as Any); fflush(stdout); exit(error == nil ? 0 : 1) }
+                    return
+                }
                 if CommandLine.arguments[1] == "--rewrite" {
                     self.web.callAsyncJavaScript("await window.ZenRayGemini.rewrite(payload)",arguments:["payload":["id":"probe","instruction":"Correct only punctuation. Return only the corrected text.","text":"Bonjour ceci est un test","model":"Flash"]],in:nil,in:.page) { result in print(result); fflush(stdout) }
                     return

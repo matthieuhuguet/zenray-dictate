@@ -18,7 +18,7 @@ struct DictationMode: Codable, Identifiable, Equatable {
 struct DictationPreferences: Codable {
     var engine: DictationEngine = .gemini
     var localOnly = false
-    var allowLocalFallback = true
+    var allowLocalFallback = false
     var keepAudio = false
     var keepHistory = true
     var learnVocabulary = false

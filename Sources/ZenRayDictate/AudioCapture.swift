@@ -52,6 +52,7 @@ final class AudioCapture: NSObject {
             throw CaptureError.microphoneDenied
         }
 
+        try BuiltinMicrophone.shared.pin()
         let input = AVAudioEngine()
         let inputNode = input.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)

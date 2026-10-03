@@ -26,28 +26,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("launched")
+        // 3 October 2026, 21:55 CEST: prevent AirPods reconnection from replacing the built-in input.
+        BuiltinMicrophone.shared.onFailure = { error in Log.write(error.localizedDescription) }
+        do { try BuiltinMicrophone.shared.start() } catch { Log.write(error.localizedDescription) }
         buildMainMenu()
         buildStatusItem()
         LoginItem.enable()
-        composer.show()
+        TranscriptionPipeline.showComposer()
 
         configureDictationShortcut()
         commandHotKey.onPress = { [weak self] in self?.flow.beginCommand() }
         commandHotKey.onRelease = { [weak self] in self?.flow.endCommand() }
         commandHotKey.register()
-        legacyDictateHotKey.onPress = { [weak self] in self?.composer.toggleDictation() }
+        legacyDictateHotKey.onPress = { [weak self] in TranscriptionPipeline.toggleLive() }
         legacyDictateHotKey.register()
-        cancelHotKey.onPress = { [weak self] in self?.flow.cancel(); self?.composer.cancelRecording() }
+        cancelHotKey.onPress = { [weak self] in self?.flow.cancel(); self?.composer.cancelRecording(); TranscriptionPipeline.cancelLive() }
         cancelHotKey.register()
 
         fnKey.onPress = { [weak self] in
-            if DictationLibrary.shared.document.preferences.fnPushToTalk { self?.flow.pressFn() }
-            else { self?.composer.toggleVisibility() }
+            if DictationLibrary.shared.document.preferences.fnPushToTalk { TranscriptionPipeline.startLive() }
+            else { TranscriptionPipeline.showComposer() }
         }
         fnKey.onRelease = { [weak self] in
-            if DictationLibrary.shared.document.preferences.fnPushToTalk { self?.flow.releaseFn() }
+            if DictationLibrary.shared.document.preferences.fnPushToTalk { TranscriptionPipeline.stopLive() }
         }
-        fnKey.onHandsFree = { [weak self] in self?.flow.fnSpace() }
+        fnKey.onHandsFree = { TranscriptionPipeline.liveHandsFree() }
         let fnStarted = fnKey.start()
         Log.write("Fn visibility monitor started: \(fnStarted)")
         if !fnStarted {
@@ -110,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "Hold Fn to dictate; double Fn or Fn+Space hands-free; hold ⌃⇧D for commands; ⌘D composer",
+            title: "Hold Fn to dictate; double Fn or Fn+Space hands-free; hold ⌃⇧D for commands; ⌘D Gemini mic",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
@@ -121,7 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(menu, "Hands-free dictation", #selector(toggleFlow))
         add(menu, "Command Mode", #selector(toggleCommandMode))
         add(menu, "Retry capsule recording", #selector(retryFlow))
-        add(menu, "Show composer", #selector(showComposer))
+        add(menu, "Show Gemini composer", #selector(showComposer))
+        add(menu, "Advanced native composer", #selector(showNativeComposer))
         add(menu, "Gemini session / Sign in", #selector(showGeminiSession))
         add(menu, "Retry last recording", #selector(retryRecording))
         add(menu, "Copy composer text", #selector(copyComposer))
@@ -152,15 +156,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dictateHotKey?.unregister()
         let preferences = DictationLibrary.shared.document.preferences
         let shortcut = GlobalHotKey(keyCode:preferences.shortcutKeyCode,modifiers:preferences.shortcutModifiers,description:"Custom dictation shortcut")
-        shortcut.onPress = { [weak self] in self?.flow.toggleHandsFree() }
+        shortcut.onPress = { [weak self] in TranscriptionPipeline.toggleLive() }
         if !shortcut.register() { Log.write("Configured dictation shortcut is unavailable; Fn remains available.") }
         dictateHotKey = shortcut
     }
     @objc private func showLibrary() { libraryWindow.show(coordinator:flow) { [weak self] in self?.configureDictationShortcut() } }
-    @objc private func toggleFlow() { flow.toggleHandsFree() }
+    @objc private func toggleFlow() { TranscriptionPipeline.toggleLive() }
     @objc private func toggleCommandMode() { flow.toggleCommand() }
     @objc private func retryFlow() { flow.retry() }
-    @objc private func showComposer() { composer.show() }
+    @objc private func showComposer() { TranscriptionPipeline.showComposer() }
+    @objc private func showNativeComposer() { composer.show() }
     @objc private func clearComposer() { composer.clearComposer() }
     @objc private func copyComposer() { composer.copyComposerText() }
     @objc private func pasteComposer() { composer.pasteComposerText() }
@@ -174,7 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Clicking the Dock icon while the window is hidden must bring it back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        composer.show()
+        TranscriptionPipeline.showComposer()
         return true
     }
 
@@ -188,5 +193,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         legacyDictateHotKey.unregister()
         cancelHotKey.unregister()
         fnKey.stop()
+        BuiltinMicrophone.shared.stop()
     }
 }
