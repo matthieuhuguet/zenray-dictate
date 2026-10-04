@@ -16,6 +16,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         static let capsuleMaximumHeight: CGFloat = 460
         static let rightInset: CGFloat = 18
         static let fadeDuration: TimeInterval = 0.18
+        static let resultFadeDuration: TimeInterval = 0.1
         static let sessionID = UUID(uuidString: "72BB7BB9-9B1C-4DF7-BC76-6F8C4BE422D1")!
     }
 
@@ -33,6 +34,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     private var liveFinishing = false
     private var composerPresented = false
     private var resultPresented = false
+    private var resultTransitioning = false
+    private var resultTransitionElapsed: TimeInterval = 0
     private var fadeGeneration = 0
     private var outsideMonitor: Any?
     private var localMonitor: Any?
@@ -113,7 +116,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         webView.evaluateJavaScript("window.ZenRayComposer?.setCompact(true)")
     }
     func showComposer(activate: Bool = true) {
-        fadeGeneration += 1;composerPresented=true
+        fadeGeneration += 1;resultTransitioning=false;composerPresented=true
         prepareCompact()
         sessionWindow.ignoresMouseEvents=false;sessionWindow.alphaValue=1
         if activate { sessionWindow.makeKeyAndOrderFront(nil);NSApp.activate(ignoringOtherApps:true) }
@@ -122,8 +125,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     func toggleComposer() { if composerPresented { fadeComposer() } else { showComposer() } }
     func fadeComposer() {
         // 4 October 2026: recording stays visible until the final transcript is ready.
-        guard compact,composerPresented,!liveRecording,!liveStarting,!liveFinishing else { return }
-        composerPresented=false;fadeGeneration += 1;let generation=fadeGeneration
+        guard compact,composerPresented,!liveRecording,!liveStarting else { return }
+        composerPresented=false;resultTransitioning=false;fadeGeneration += 1;let generation=fadeGeneration
         NSAnimationContext.runAnimationGroup({ context in
             context.duration=Settings.fadeDuration
             sessionWindow.animator().alphaValue=0
@@ -133,6 +136,31 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
                 self.sessionWindow.ignoresMouseEvents=true
                 // 4 October 2026: keep the hidden page alive until capture completion.
                 if !self.liveRecording && !self.liveStarting && !self.liveFinishing { self.sessionWindow.orderOut(nil) }
+            }
+        })
+    }
+    // 4 October 2026: move as soon as capture stops, independently of final transcript stabilization.
+    private func transitionToResult() {
+        guard compact,composerPresented,!resultPresented,!resultTransitioning else { return }
+        resultTransitioning=true;resultTransitionElapsed=0
+        fadeGeneration += 1;let generation=fadeGeneration,started=ProcessInfo.processInfo.systemUptime
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration=Settings.resultFadeDuration
+            sessionWindow.animator().alphaValue=0
+        },completionHandler:{ [weak self] in
+            Task { @MainActor in
+                guard let self,self.fadeGeneration==generation,self.composerPresented else { return }
+                self.resultPresented=true;self.prepareCompact();self.resultTransitioning=false
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration=Settings.resultFadeDuration
+                    self.sessionWindow.animator().alphaValue=1
+                },completionHandler:{ [weak self] in
+                    Task { @MainActor in
+                        guard let self,self.fadeGeneration==generation else { return }
+                        self.resultTransitionElapsed=ProcessInfo.processInfo.systemUptime-started
+                        Log.write("Gemini result transition completed in \(self.resultTransitionElapsed) seconds")
+                    }
+                })
             }
         })
     }
@@ -199,7 +227,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     func verificationLoseFocus() { sessionWindow.resignKey();NSApp.deactivate();windowDidResignKey(Notification(name:NSWindow.didResignKeyNotification,object:sessionWindow)) }
     func verificationState() async throws -> [String:Any] {
         var result=(try await webView.evaluateJavaScript("({ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
-        result["appActive"]=NSApp.isActive;result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
+        result["transitionElapsed"]=resultTransitionElapsed;result["appActive"]=NSApp.isActive;result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
         result["recording"]=liveRecording;result["starting"]=liveStarting;result["finishing"]=liveFinishing
         result["width"]=Double(sessionWindow.frame.width)
         result["right"]=Double(sessionWindow.frame.maxX)
@@ -211,7 +239,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     #endif
 
     func showSession() {
-        fadeGeneration += 1;composerPresented=true
+        fadeGeneration += 1;resultTransitioning=false;composerPresented=true
         sessionWindow.alphaValue=1;sessionWindow.ignoresMouseEvents=false
         compact = false
         sessionWindow.styleMask = [.titled,.closable,.resizable,.nonactivatingPanel]
@@ -301,6 +329,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             guard message.frameInfo.isMainFrame,message.frameInfo.securityOrigin.host==Settings.url.host,continuation==nil,
                   let payload=message.body as? [String:Any],let state=payload["state"] as? String else { return }
             if state=="recording" { liveRecording=true;presentRecording();onLiveState?(state);return }
+            if state=="finishing" { liveRecording=false;liveFinishing=true;onLiveState?(state);transitionToResult();return }
             if state=="error" { liveRecording=false;liveStarting=false;liveFinishing=false;showLiveError(TranscriptionError.geminiUnavailable(payload["error"] as? String ?? "Gemini capture failed."));return }
             if state=="finished" {
                 liveRecording=false;liveFinishing=false
@@ -321,12 +350,12 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             onLiveState?("idle")
             if state=="finished",let text=payload["text"] as? String,!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
                 // 4 October 2026: completed text stays at the bottom center until an outside click.
-                resultPresented=true;showComposer(activate:false)
+                transitionToResult()
             } else { fadeComposer() }
             return
         }
         if message.name == "composerLayout" {
-            guard compact, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Settings.url.host,
+            guard compact,!resultTransitioning, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Settings.url.host,
                   let payload=message.body as? [String:Any],let height=payload["height"] as? Double,height.isFinite else { return }
             let size=NSSize(width:resultPresented ? Settings.resultWidth : Settings.capsuleWidth,height:min(Settings.capsuleMaximumHeight,max(Settings.capsuleMinimumHeight,height)))
             sessionWindow.setContentSize(size)

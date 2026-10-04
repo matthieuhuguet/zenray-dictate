@@ -40,6 +40,15 @@ import AppKit
                 let recording=try await web.verificationState()
                 guard recording["appActive"] as? Bool==false,recording["recording"] as? Bool==true,recording["presented"] as? Bool==true,recording["alpha"] as? Double==1,recording["width"] as? Double==340,recording["nativeWaveform"] as? Bool==true,let right=recording["right"] as? Double,let screenRight=recording["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Recording did not stay visible with the native waveform at the right edge"] ) }
                 web.pressFn()
+                let transitionDeadline=Date().addingTimeInterval(0.6)
+                var transitionElapsed:Double=0
+                while Date()<transitionDeadline {
+                    let state=try await web.verificationState()
+                    transitionElapsed=state["transitionElapsed"] as? Double ?? 0
+                    if transitionElapsed>0 { break }
+                    try await Task.sleep(nanoseconds:10_000_000)
+                }
+                guard transitionElapsed>0,transitionElapsed<0.4 else { throw NSError(domain:"FnProbe",code:6,userInfo:[NSLocalizedDescriptionKey:"Result transition did not finish promptly"] ) }
                 let finishDeadline=Date().addingTimeInterval(25)
                 while Date()<finishDeadline {
                     let state=try await web.verificationState()
@@ -56,7 +65,7 @@ import AppKit
                 try await Task.sleep(nanoseconds:400_000_000)
                 let hidden=try await web.verificationState()
                 guard hidden["presented"] as? Bool==false,hidden["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:5,userInfo:[NSLocalizedDescriptionKey:"Fade did not hide preview"] ) }
-                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
+                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"transitionElapsed":transitionElapsed,"fadeOutDuration":0.1,"fadeInDuration":0.1,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
                 print(String(data:try JSONSerialization.data(withJSONObject:proof,options:[.sortedKeys]),encoding:.utf8)!)
                 if clipboard.changeCount==stamp { clipboard.clearContents();clipboard.writeObjects(previous.map { formats in let item=NSPasteboardItem();for(type,data)in formats{item.setData(data,forType:type)};return item }) }
                 fflush(stdout);exit(0)

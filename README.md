@@ -1,3 +1,11 @@
+## 4 October 2026: Immediate 0.1 s out / 0.1 s in result transition
+
+Version 3.6 build 9 begins the right-to-bottom-center transition as soon as the microphone stops. It fades out for 0.1 seconds, relocates while transparent, then fades in for 0.1 seconds. The real Gemini witness measures 0.231538 seconds between animation start and completion, including AppKit scheduling. (4 October 2026)
+
+The 900 ms transcript-stability guard still protects clipboard/history completion, but no longer delays the visible result. Late Gemini edits update the same native DOM in the bottom-center capsule. Clicking outside can dismiss this result while final text settles; completion does not reopen a dismissed capsule. Recording remains visible at right and cancelled/interrupted animations cannot relocate a newer capture. (4 October 2026)
+
+Real physical Fn is now confirmed by AppKit global press, Gemini start/stop and clipboard logs in Chrome at 10:20:30/10:20:40 and Codex at 10:22:31/10:22:35. Both sequences run with appActive=false. (4 October 2026)
+
 ## 4 October 2026: AppKit Fn monitoring replaces the disabled Quartz tap
 
 Version 3.5 build 8 removes the Quartz event tap. The running app measured accessibility=true but quartzListenAccess=false; the previous listener repeatedly stayed disabled despite four re-enable attempts per second. The old started=true log therefore did not prove effective global listening. (4 October 2026)

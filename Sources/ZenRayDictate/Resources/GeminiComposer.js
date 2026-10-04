@@ -71,6 +71,8 @@
     if(finalizing)return finalizing;
     if(!capture)return '';
     const current=capture;
+    // 4 October 2026: relocate the preview immediately; clipboard completion still waits for final text.
+    notify({state:'finishing',id:current.id});
     finalizing=(async()=>{
       let previous=text(),changedAt=Date.now();
       const deadline=Date.now()+settings.finishTimeoutMs;
