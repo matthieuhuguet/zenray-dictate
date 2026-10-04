@@ -1,3 +1,11 @@
+## 4 October 2026: Permanent Fn recovery across focus changes
+
+Version 3.4 build 7 retains a global Fn event tap while the app runs. A 250 ms health check in the common run-loop modes re-enables disabled taps, replaces invalid taps and clears a pressed state when a release was missed. Only physical Fn modifier events trigger capture; checking health never invents a press. Press events and listener recovery are recorded in ~/Library/Logs/ZenRayDictate.log. (4 October 2026)
+
+The Gemini web view uses the public inactiveSchedulingPolicy.none setting so its capture observers and completion timers continue running while inactive. Recording remains visible at right; final text is copied and shown bottom center, then outside-click fade is enabled. (4 October 2026)
+
+Three Fn state tests reproduce a missed-release lock, verify recovery, prevent duplicate held-key presses and reject invented presses. The real Gemini witness probe explicitly deactivates the application before starting and again during capture, then verifies Fn start/stop, visible native waveform and automatic clipboard completion with appActive=false. (4 October 2026)
+
 ## 4 October 2026: Visible recording and bottom-center result
 
 Version 3.3 build 6 supersedes the hidden-recording behavior below. Fn starts capture with the real Gemini capsule and native waveform visible at the right edge (340 points wide). The capsule stays visible throughout recording and finalization, even when another application is clicked. Releasing Fn keeps capture active; the next Fn activation stops it. (4 October 2026)

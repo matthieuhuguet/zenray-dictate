@@ -24,6 +24,7 @@ import AppKit
                 try await web.installVerificationAudio(audio)
                 let clipboard=NSPasteboard.general
                 let previous=clipboard.pasteboardItems?.map { item in item.types.compactMap { type in item.data(forType:type).map{(type,$0)} } } ?? []
+                web.verificationLoseFocus()
                 web.pressFn()
                 let startDeadline=Date().addingTimeInterval(15)
                 while Date()<startDeadline {
@@ -33,10 +34,11 @@ import AppKit
                     try await Task.sleep(nanoseconds:100_000_000)
                 }
                 web.releaseFn()
+                web.verificationLoseFocus()
                 try await Task.sleep(nanoseconds:4_500_000_000)
                 web.fadeComposer()
                 let recording=try await web.verificationState()
-                guard recording["recording"] as? Bool==true,recording["presented"] as? Bool==true,recording["alpha"] as? Double==1,recording["width"] as? Double==340,recording["nativeWaveform"] as? Bool==true,let right=recording["right"] as? Double,let screenRight=recording["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Recording did not stay visible with the native waveform at the right edge"] ) }
+                guard recording["appActive"] as? Bool==false,recording["recording"] as? Bool==true,recording["presented"] as? Bool==true,recording["alpha"] as? Double==1,recording["width"] as? Double==340,recording["nativeWaveform"] as? Bool==true,let right=recording["right"] as? Double,let screenRight=recording["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Recording did not stay visible with the native waveform at the right edge"] ) }
                 web.pressFn()
                 let finishDeadline=Date().addingTimeInterval(25)
                 while Date()<finishDeadline {
@@ -54,7 +56,7 @@ import AppKit
                 try await Task.sleep(nanoseconds:400_000_000)
                 let hidden=try await web.verificationState()
                 guard hidden["presented"] as? Bool==false,hidden["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:5,userInfo:[NSLocalizedDescriptionKey:"Fade did not hide preview"] ) }
-                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
+                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
                 print(String(data:try JSONSerialization.data(withJSONObject:proof,options:[.sortedKeys]),encoding:.utf8)!)
                 if clipboard.changeCount==stamp { clipboard.clearContents();clipboard.writeObjects(previous.map { formats in let item=NSPasteboardItem();for(type,data)in formats{item.setData(data,forType:type)};return item }) }
                 fflush(stdout);exit(0)

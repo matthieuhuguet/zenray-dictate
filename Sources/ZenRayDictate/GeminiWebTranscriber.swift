@@ -48,6 +48,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Settings.sessionID)
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        // 4 October 2026: background dictation must keep its event observers and completion timers running.
+        configuration.preferences.inactiveSchedulingPolicy = .none
         #if DEBUG
         if let script=Self.verificationScript { configuration.userContentController.addUserScript(WKUserScript(source:script,injectionTime:.atDocumentStart,forMainFrameOnly:true)) }
         #endif
@@ -166,7 +168,10 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             if case let .failure(error)=result { self.showLiveError(error) }
         }
     }
-    func toggleLiveMicrophone() { if liveRecording || liveStarting { stopLiveMicrophone() } else { startLiveMicrophone() } }
+    func toggleLiveMicrophone() {
+        Log.write("Gemini Fn toggle: recording=\(liveRecording), starting=\(liveStarting), finishing=\(liveFinishing), appActive=\(NSApp.isActive)")
+        if liveRecording || liveStarting { stopLiveMicrophone() } else { startLiveMicrophone() }
+    }
     func cancelLiveMicrophone() {
         stopRequested=false
         webView.evaluateJavaScript("window.ZenRayComposer?.cancel()")
@@ -191,9 +196,10 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             }
         }
     }
+    func verificationLoseFocus() { sessionWindow.resignKey();NSApp.deactivate();windowDidResignKey(Notification(name:NSWindow.didResignKeyNotification,object:sessionWindow)) }
     func verificationState() async throws -> [String:Any] {
         var result=(try await webView.evaluateJavaScript("({ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
-        result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
+        result["appActive"]=NSApp.isActive;result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
         result["recording"]=liveRecording;result["starting"]=liveStarting;result["finishing"]=liveFinishing
         result["width"]=Double(sessionWindow.frame.width)
         result["right"]=Double(sessionWindow.frame.maxX)
