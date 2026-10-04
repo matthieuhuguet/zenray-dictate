@@ -400,10 +400,18 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
 
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        // 3 October 2026, 15:52 CEST: the bridge supplies saved audio; other media prompts remain user-controlled.
-        guard origin.host == Settings.url.host,type == .microphone else { decisionHandler(.deny); return }
-        do { try BuiltinMicrophone.shared.pin(); decisionHandler(.prompt) }
-        catch { showLiveError(error); decisionHandler(.deny) }
+        // 4 October 2026: grant microphone permission directly to Gemini so the website never prompts the user again.
+        guard (origin.host == Settings.url.host || origin.host.hasSuffix(".google.com")), type == .microphone else {
+            decisionHandler(.deny)
+            return
+        }
+        do {
+            try BuiltinMicrophone.shared.pin()
+            decisionHandler(.grant)
+        } catch {
+            showLiveError(error)
+            decisionHandler(.deny)
+        }
     }
 }
 
