@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bgW1" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="bgW3" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#151822"/>
       <stop offset="100%" stop-color="#0A0C10"/>
     </linearGradient>
-    <linearGradient id="borderW1" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="borderW3" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#3A4659" stop-opacity="0.6"/>
       <stop offset="100%" stop-color="#1E2430" stop-opacity="0.3"/>
     </linearGradient>
     
-    <clipPath id="w1_starClip">
+    <clipPath id="w3_starClip">
       <path d="M -25,-355 A 25 25 0 0 1 25,-355 Q 100,-100 355,-25 A 25 25 0 0 1 355,25 Q 100,100 25,355 A 25 25 0 0 1 -25,355 Q -100,100 -355,25 A 25 25 0 0 1 -355,-25 Q -100,-100 -25,-355 Z"/>
     </clipPath>
 
     <!-- Top: Coral / Red -->
-    <radialGradient id="w1_starTop" cx="0" cy="-320" r="360" gradientUnits="userSpaceOnUse">
+    <radialGradient id="w3_starTop" cx="0" cy="-320" r="360" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#E25167"/>
       <stop offset="42%" stop-color="#DA5569" stop-opacity="0.98"/>
       <stop offset="78%" stop-color="#8E65A8" stop-opacity="0.5"/>
@@ -23,7 +23,7 @@
     </radialGradient>
 
     <!-- Bottom: Emerald Green -->
-    <radialGradient id="w1_starBottom" cx="0" cy="320" r="360" gradientUnits="userSpaceOnUse">
+    <radialGradient id="w3_starBottom" cx="0" cy="320" r="360" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#16B96B"/>
       <stop offset="42%" stop-color="#1DB572" stop-opacity="0.98"/>
       <stop offset="78%" stop-color="#32A2B2" stop-opacity="0.5"/>
@@ -31,7 +31,7 @@
     </radialGradient>
 
     <!-- Left: Golden Yellow -->
-    <radialGradient id="w1_starLeft" cx="-320" cy="0" r="360" gradientUnits="userSpaceOnUse">
+    <radialGradient id="w3_starLeft" cx="-320" cy="0" r="360" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#D6C42C"/>
       <stop offset="42%" stop-color="#C5BD36" stop-opacity="0.98"/>
       <stop offset="78%" stop-color="#6DA67C" stop-opacity="0.5"/>
@@ -39,7 +39,7 @@
     </radialGradient>
 
     <!-- Right: Electric Blue -->
-    <radialGradient id="w1_starRight" cx="320" cy="0" r="360" gradientUnits="userSpaceOnUse">
+    <radialGradient id="w3_starRight" cx="320" cy="0" r="360" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#3186FF"/>
       <stop offset="50%" stop-color="#3186FF" stop-opacity="0.98"/>
       <stop offset="82%" stop-color="#348BE8" stop-opacity="0.5"/>
@@ -47,32 +47,35 @@
     </radialGradient>
     
 
-    <filter id="shadowCenteredW1" x="-200" y="-200" width="1424" height="1424" filterUnits="userSpaceOnUse">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="11"/>
-      <feColorMatrix type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.75 0"/>
+    <filter id="shadowCenteredW3" x="-200" y="-200" width="1424" height="1424" filterUnits="userSpaceOnUse">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="18" result="diffuse"/>
+      <feColorMatrix in="diffuse" type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.55 0" result="diffuseCol"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="sharp"/>
+      <feColorMatrix in="sharp" type="matrix" values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.85 0" result="sharpCol"/>
       <feMerge>
-        <feMergeNode/>
+        <feMergeNode in="diffuseCol"/>
+        <feMergeNode in="sharpCol"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
   </defs>
 
-  <rect width="1024" height="1024" rx="224" fill="url(#bgW1)"/>
-  <rect width="1022" height="1022" x="1" y="1" rx="223" fill="none" stroke="url(#borderW1)" stroke-width="2"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#bgW3)"/>
+  <rect width="1022" height="1022" x="1" y="1" rx="223" fill="none" stroke="url(#borderW3)" stroke-width="2"/>
 
   
     <g transform="translate(512, 512)">
-      <g clip-path="url(#w1_starClip)">
+      <g clip-path="url(#w3_starClip)">
         <rect x="-400" y="-400" width="800" height="800" fill="#348BE8"/>
-        <rect x="-400" y="-400" width="800" height="800" fill="url(#w1_starRight)"/>
-        <rect x="-400" y="-400" width="800" height="800" fill="url(#w1_starLeft)"/>
-        <rect x="-400" y="-400" width="800" height="800" fill="url(#w1_starBottom)"/>
-        <rect x="-400" y="-400" width="800" height="800" fill="url(#w1_starTop)"/>
+        <rect x="-400" y="-400" width="800" height="800" fill="url(#w3_starRight)"/>
+        <rect x="-400" y="-400" width="800" height="800" fill="url(#w3_starLeft)"/>
+        <rect x="-400" y="-400" width="800" height="800" fill="url(#w3_starBottom)"/>
+        <rect x="-400" y="-400" width="800" height="800" fill="url(#w3_starTop)"/>
       </g>
     </g>
     
 
-  <g transform="translate(512, 512) scale(21.0) translate(-33.879, -27.000)" filter="url(#shadowCenteredW1)">
+  <g transform="translate(512, 512) scale(21.0) translate(-33.879, -27.000)" filter="url(#shadowCenteredW3)">
     <path d="M30.0938 35.7305L37.6641 35.7305C38.0859 35.7305 38.3789 35.4375 38.3789 35.0156C38.3789 34.5938 38.0859 34.2891 37.6641 34.2891L34.6055 34.2891L34.6055 32.4961C37.6055 32.1797 39.6445 29.918 39.6445 26.8945L39.6445 25.5234C39.6445 25.1367 39.3164 24.8086 38.9297 24.8086C38.543 24.8086 38.2148 25.1367 38.2148 25.5234L38.2148 26.8945C38.2148 29.4258 36.4688 31.1602 33.8789 31.1602C31.2773 31.1602 29.543 29.4258 29.543 26.8945L29.543 25.5234C29.543 25.1367 29.2148 24.8086 28.8281 24.8086C28.4414 24.8086 28.1133 25.1367 28.1133 25.5234L28.1133 26.8945C28.1133 29.918 30.1523 32.1914 33.1523 32.4961L33.1523 34.2891L30.0938 34.2891C29.6719 34.2891 29.3672 34.5938 29.3672 35.0156C29.3672 35.4375 29.6719 35.7305 30.0938 35.7305ZM33.8789 29.5195C35.3672 29.5195 36.3867 28.3594 36.3867 26.8125L36.3867 20.9648C36.3867 19.418 35.3672 18.2695 33.8789 18.2695C32.3789 18.2695 31.3594 19.418 31.3594 20.9648L31.3594 26.8125C31.3594 28.3594 32.3789 29.5195 33.8789 29.5195Z" fill="#FFFFFF"/>
   </g>
 </svg>

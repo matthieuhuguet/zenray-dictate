@@ -18,8 +18,12 @@ case "$CHOICE" in
         NAME="proposition-3-dark-gemini"
         LABEL="Gemini Spark Dark (Dark mode · Onde spectre + Étoile Gemini 4 couleurs arrondie)"
         ;;
+    4)
+        NAME="white-mic-p1-soft-shadow"
+        LABEL="Microphone Blanc Pur (Dark mode · Étoile Gemini 4 couleurs arrondie + Ombre portée 100% centrée)"
+        ;;
     *)
-        echo "Usage: $0 [1|2|3]"
+        echo "Usage: $0 [1|2|3|4]"
         exit 1
         ;;
 esac
