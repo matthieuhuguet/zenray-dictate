@@ -49,6 +49,10 @@ import AppKit
                     try await Task.sleep(nanoseconds:10_000_000)
                 }
                 guard transitionElapsed>0,transitionElapsed<0.4 else { throw NSError(domain:"FnProbe",code:6,userInfo:[NSLocalizedDescriptionKey:"Result transition did not finish promptly"] ) }
+                web.fadeComposer()
+                try await Task.sleep(nanoseconds:250_000_000)
+                let dismissed=try await web.verificationState()
+                guard dismissed["presented"] as? Bool==false else { throw NSError(domain:"FnProbe",code:7,userInfo:[NSLocalizedDescriptionKey:"Pending result cannot be dismissed"] ) }
                 let finishDeadline=Date().addingTimeInterval(25)
                 while Date()<finishDeadline {
                     let state=try await web.verificationState()
@@ -57,6 +61,8 @@ import AppKit
                 }
                 let copied=clipboard.string(forType:.string) ?? "",stamp=clipboard.changeCount
                 guard copied.lowercased().contains("bonjour"),!states.contains("error") else { throw NSError(domain:"FnProbe",code:3,userInfo:[NSLocalizedDescriptionKey:"Capture did not copy its completed transcript"] ) }
+                let completed=try await web.verificationState()
+                guard completed["presented"] as? Bool==false,completed["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:8,userInfo:[NSLocalizedDescriptionKey:"Completion reopened the dismissed result"] ) }
                 web.showComposer()
                 try await Task.sleep(nanoseconds:300_000_000)
                 let shown=try await web.verificationState()
@@ -65,7 +71,7 @@ import AppKit
                 try await Task.sleep(nanoseconds:400_000_000)
                 let hidden=try await web.verificationState()
                 guard hidden["presented"] as? Bool==false,hidden["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:5,userInfo:[NSLocalizedDescriptionKey:"Fade did not hide preview"] ) }
-                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"transitionElapsed":transitionElapsed,"fadeOutDuration":0.1,"fadeInDuration":0.1,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
+                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"dismissedDuringStabilization":true,"completionDoesNotReopen":true,"transitionElapsed":transitionElapsed,"fadeOutDuration":0.1,"fadeInDuration":0.1,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
                 print(String(data:try JSONSerialization.data(withJSONObject:proof,options:[.sortedKeys]),encoding:.utf8)!)
                 if clipboard.changeCount==stamp { clipboard.clearContents();clipboard.writeObjects(previous.map { formats in let item=NSPasteboardItem();for(type,data)in formats{item.setData(data,forType:type)};return item }) }
                 fflush(stdout);exit(0)
