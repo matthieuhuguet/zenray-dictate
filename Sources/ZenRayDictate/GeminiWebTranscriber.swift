@@ -10,6 +10,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         static let responseTimeout: TimeInterval = 45
         static let maximumAudioBytes = 64 * 1024 * 1024
         static let capsuleWidth: CGFloat = 340
+        static let resultWidth: CGFloat = 720
+        static let bottomInset: CGFloat = 24
         static let capsuleMinimumHeight: CGFloat = 76
         static let capsuleMaximumHeight: CGFloat = 460
         static let rightInset: CGFloat = 18
@@ -30,6 +32,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     private var stopRequested = false
     private var liveFinishing = false
     private var composerPresented = false
+    private var resultPresented = false
     private var fadeGeneration = 0
     private var outsideMonitor: Any?
     private var localMonitor: Any?
@@ -91,14 +94,19 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     private func positionComposer() {
         guard let screen=NSScreen.main else { return }
         let frame=screen.visibleFrame,height=sessionWindow.frame.height
-        sessionWindow.setFrameOrigin(NSPoint(x:frame.maxX-Settings.capsuleWidth-Settings.rightInset,y:frame.midY-height/2))
+        let origin=resultPresented
+            ? NSPoint(x:frame.midX-Settings.resultWidth/2,y:frame.minY+Settings.bottomInset)
+            : NSPoint(x:frame.maxX-Settings.capsuleWidth-Settings.rightInset,y:frame.midY-height/2)
+        sessionWindow.setFrameOrigin(origin)
     }
     private func prepareCompact() {
         compact=true
         sessionWindow.styleMask=[.borderless,.nonactivatingPanel]
         sessionWindow.backgroundColor = .clear
         sessionWindow.title="ZenRayDictate · Gemini"
-        sessionWindow.setContentSize(NSSize(width:Settings.capsuleWidth,height:Settings.capsuleMinimumHeight))
+        let width=resultPresented ? Settings.resultWidth : Settings.capsuleWidth
+        sessionWindow.contentMinSize=NSSize(width:width,height:Settings.capsuleMinimumHeight)
+        sessionWindow.setContentSize(NSSize(width:width,height:Settings.capsuleMinimumHeight))
         positionComposer()
         webView.evaluateJavaScript("window.ZenRayComposer?.setCompact(true)")
     }
@@ -111,7 +119,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
     func toggleComposer() { if composerPresented { fadeComposer() } else { showComposer() } }
     func fadeComposer() {
-        guard compact,composerPresented else { return }
+        // 4 October 2026: recording stays visible until the final transcript is ready.
+        guard compact,composerPresented,!liveRecording,!liveStarting,!liveFinishing else { return }
         composerPresented=false;fadeGeneration += 1;let generation=fadeGeneration
         NSAnimationContext.runAnimationGroup({ context in
             context.duration=Settings.fadeDuration
@@ -126,11 +135,9 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         })
     }
     func windowDidResignKey(_ notification: Notification) { if NSApp.currentEvent?.window?.level != .statusBar { fadeComposer() } }
-    private func prepareHiddenCapture() {
-        if !composerPresented {
-            prepareCompact();sessionWindow.alphaValue=0;sessionWindow.ignoresMouseEvents=true
-            sessionWindow.orderFrontRegardless()
-        }
+    private func presentRecording() {
+        resultPresented=false
+        showComposer(activate:false)
     }
     func pressFn() { toggleLiveMicrophone() }
     func releaseFn() {}
@@ -140,7 +147,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         guard !liveRecording,!liveStarting,!liveFinishing,continuation==nil else { return }
         do { try BuiltinMicrophone.shared.pin() } catch { showLiveError(error);return }
         stopRequested=false;liveStarting=true;onLiveState?("starting")
-        prepareHiddenCapture()
+        presentRecording()
         webView.callAsyncJavaScript("const deadline=Date.now()+15000;while(!window.ZenRayComposer && Date.now()<deadline)await new Promise(r=>setTimeout(r,100));if(!window.ZenRayComposer)throw new Error('Gemini has not loaded. Retry once the session is ready.');await window.ZenRayComposer.begin()",arguments:[:],in:nil,in:.page) { [weak self] result in
             guard let self else { return }
             self.liveStarting=false
@@ -158,7 +165,6 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             self.liveRecording=false;self.liveFinishing=false
             if case let .failure(error)=result { self.showLiveError(error) }
         }
-        fadeComposer()
     }
     func toggleLiveMicrophone() { if liveRecording || liveStarting { stopLiveMicrophone() } else { startLiveMicrophone() } }
     func cancelLiveMicrophone() {
@@ -186,12 +192,14 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         }
     }
     func verificationState() async throws -> [String:Any] {
-        var result=(try await webView.evaluateJavaScript("({ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
+        var result=(try await webView.evaluateJavaScript("({ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
         result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
         result["recording"]=liveRecording;result["starting"]=liveStarting;result["finishing"]=liveFinishing
         result["width"]=Double(sessionWindow.frame.width)
         result["right"]=Double(sessionWindow.frame.maxX)
         result["screenRight"]=Double(NSScreen.main?.visibleFrame.maxX ?? 0)
+        result["bottom"]=Double(sessionWindow.frame.minY);result["screenBottom"]=Double(NSScreen.main?.visibleFrame.minY ?? 0)
+        result["center"]=Double(sessionWindow.frame.midX);result["screenCenter"]=Double(NSScreen.main?.visibleFrame.midX ?? 0)
         return result
     }
     #endif
@@ -286,7 +294,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         if message.name == "liveCapture" {
             guard message.frameInfo.isMainFrame,message.frameInfo.securityOrigin.host==Settings.url.host,continuation==nil,
                   let payload=message.body as? [String:Any],let state=payload["state"] as? String else { return }
-            if state=="recording" { liveRecording=true;onLiveState?(state);return }
+            if state=="recording" { liveRecording=true;presentRecording();onLiveState?(state);return }
             if state=="error" { liveRecording=false;liveStarting=false;liveFinishing=false;showLiveError(TranscriptionError.geminiUnavailable(payload["error"] as? String ?? "Gemini capture failed."));return }
             if state=="finished" {
                 liveRecording=false;liveFinishing=false
@@ -304,14 +312,17 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
                     }
                 }
             }
-            onLiveState?("idle");fadeComposer()
-            if !composerPresented && compact && sessionWindow.alphaValue==0 { sessionWindow.orderOut(nil) }
+            onLiveState?("idle")
+            if state=="finished",let text=payload["text"] as? String,!text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {
+                // 4 October 2026: completed text stays at the bottom center until an outside click.
+                resultPresented=true;showComposer(activate:false)
+            } else { fadeComposer() }
             return
         }
         if message.name == "composerLayout" {
             guard compact, message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Settings.url.host,
                   let payload=message.body as? [String:Any],let height=payload["height"] as? Double,height.isFinite else { return }
-            let size=NSSize(width:Settings.capsuleWidth,height:min(Settings.capsuleMaximumHeight,max(Settings.capsuleMinimumHeight,height)))
+            let size=NSSize(width:resultPresented ? Settings.resultWidth : Settings.capsuleWidth,height:min(Settings.capsuleMaximumHeight,max(Settings.capsuleMinimumHeight,height)))
             sessionWindow.setContentSize(size)
             positionComposer()
             return

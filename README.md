@@ -1,3 +1,9 @@
+## 4 October 2026: Visible recording and bottom-center result
+
+Version 3.3 build 6 supersedes the hidden-recording behavior below. Fn starts capture with the real Gemini capsule and native waveform visible at the right edge (340 points wide). The capsule stays visible throughout recording and finalization, even when another application is clicked. Releasing Fn keeps capture active; the next Fn activation stops it. (4 October 2026)
+
+After Gemini finishes, the text is copied automatically and remains visible in a 720-point capsule at the bottom center, 24 points above the available screen edge. Clicking outside fades this completed result away. Idle startup remains hidden; the icon opens the preview. (4 October 2026)
+
 ## 4 October 2026: Hidden Fn toggle and automatic clipboard
 
 Version 3.2 starts with the Gemini composer hidden. Press Fn once to start the website microphone and once again to stop; releasing Fn keeps recording. Completed dictation is copied automatically to the clipboard and saved in history without retaining audio. Each capture waits for Gemini's final text before copying. Cancellation copies nothing. (4 October 2026)

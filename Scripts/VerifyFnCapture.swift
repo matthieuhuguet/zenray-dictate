@@ -34,8 +34,9 @@ import AppKit
                 }
                 web.releaseFn()
                 try await Task.sleep(nanoseconds:4_500_000_000)
+                web.fadeComposer()
                 let recording=try await web.verificationState()
-                guard recording["recording"] as? Bool==true,recording["presented"] as? Bool==false,recording["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Release stopped capture or capture became visible"] ) }
+                guard recording["recording"] as? Bool==true,recording["presented"] as? Bool==true,recording["alpha"] as? Double==1,recording["width"] as? Double==340,recording["nativeWaveform"] as? Bool==true,let right=recording["right"] as? Double,let screenRight=recording["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Recording did not stay visible with the native waveform at the right edge"] ) }
                 web.pressFn()
                 let finishDeadline=Date().addingTimeInterval(25)
                 while Date()<finishDeadline {
@@ -48,12 +49,12 @@ import AppKit
                 web.showComposer()
                 try await Task.sleep(nanoseconds:300_000_000)
                 let shown=try await web.verificationState()
-                guard shown["presented"] as? Bool==true,shown["width"] as? Double==340,let right=shown["right"] as? Double,let screenRight=shown["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:4,userInfo:[NSLocalizedDescriptionKey:"Preview is not narrow and right-aligned"] ) }
+                guard shown["presented"] as? Bool==true,shown["width"] as? Double==720,let bottom=shown["bottom"] as? Double,let screenBottom=shown["screenBottom"] as? Double,let center=shown["center"] as? Double,let screenCenter=shown["screenCenter"] as? Double,abs(bottom-screenBottom-24)<1,abs(center-screenCenter)<1 else { throw NSError(domain:"FnProbe",code:4,userInfo:[NSLocalizedDescriptionKey:"Final text is not bottom-centered"] ) }
                 web.fadeComposer()
                 try await Task.sleep(nanoseconds:400_000_000)
                 let hidden=try await web.verificationState()
                 guard hidden["presented"] as? Bool==false,hidden["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:5,userInfo:[NSLocalizedDescriptionKey:"Fade did not hide preview"] ) }
-                let proof:[String:Any]=["date":"4 October 2026","hiddenCapture":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"previewWidth":shown["width"]!,"rightInset":18,"faded":true,"states":states]
+                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
                 print(String(data:try JSONSerialization.data(withJSONObject:proof,options:[.sortedKeys]),encoding:.utf8)!)
                 if clipboard.changeCount==stamp { clipboard.clearContents();clipboard.writeObjects(previous.map { formats in let item=NSPasteboardItem();for(type,data)in formats{item.setData(data,forType:type)};return item }) }
                 fflush(stdout);exit(0)
