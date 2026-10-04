@@ -15,8 +15,8 @@ case "$CHOICE" in
         LABEL="Antigravity Dark Glow (Dark mode · Néon cosmique)"
         ;;
     3)
-        NAME="proposition-3-gemini-spark"
-        LABEL="Gemini Spark Signature (Fond clair · Micro PBR + Étoile Gemini)"
+        NAME="proposition-3-dark-gemini"
+        LABEL="Gemini Spark Dark (Dark mode · Onde spectre + Étoile Gemini 4 couleurs arrondie)"
         ;;
     *)
         echo "Usage: $0 [1|2|3]"
