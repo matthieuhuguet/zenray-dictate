@@ -1,3 +1,11 @@
+## 4 October 2026: AppKit Fn monitoring replaces the disabled Quartz tap
+
+Version 3.5 build 8 removes the Quartz event tap. The running app measured accessibility=true but quartzListenAccess=false; the previous listener repeatedly stayed disabled despite four re-enable attempts per second. The old started=true log therefore did not prove effective global listening. (4 October 2026)
+
+Permanent NSEvent global and local monitors now cover other apps and ZenRayDictate respectively, with a shared edge detector and missed-release recovery. Runtime startup confirms local=true, global=true and accessibility=true. The capture window and focus handling remain unchanged. (4 October 2026)
+
+Four Fn tests, including local-to-global transition with duplicate down events, pass together with ten library tests and signed bundle verification. Physical Fn from Codex is being verified with the user; monitor installation alone is not proof of keyboard delivery. Apple documents both monitors as necessary for coverage of own and other applications: https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/MonitoringEvents/MonitoringEvents.html (4 October 2026)
+
 ## 4 October 2026: Permanent Fn recovery across focus changes
 
 Version 3.4 build 7 retains a global Fn event tap while the app runs. A 250 ms health check in the common run-loop modes re-enables disabled taps, replaces invalid taps and clears a pressed state when a release was missed. Only physical Fn modifier events trigger capture; checking health never invents a press. Press events and listener recovery are recorded in ~/Library/Logs/ZenRayDictate.log. (4 October 2026)

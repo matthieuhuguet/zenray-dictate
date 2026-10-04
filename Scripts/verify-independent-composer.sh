@@ -7,8 +7,8 @@ cd "$(dirname "$0")/.."
 ./build.sh >/dev/null
 
 test "$(plutil -extract NSMicrophoneUsageDescription raw ZenRayDictate.app/Contents/Info.plist)" != ""
-test "$(plutil -extract CFBundleShortVersionString raw ZenRayDictate.app/Contents/Info.plist)" = "3.4"
-test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "7"
+test "$(plutil -extract CFBundleShortVersionString raw ZenRayDictate.app/Contents/Info.plist)" = "3.5"
+test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "8"
 codesign --verify --deep --strict ZenRayDictate.app
 codesign --display --entitlements :- ZenRayDictate.app 2>/dev/null | grep -q 'com.apple.security.device.audio-input'
 otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'AVFoundation.framework'
@@ -24,7 +24,8 @@ grep -q 'description: "⌘D"' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'kVK_ANSI_Q' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'controlKey' Sources/ZenRayDictate/AppDelegate.swift
 grep -q 'FnKeyMonitor' Sources/ZenRayDictate/AppDelegate.swift
-grep -q 'maskSecondaryFn' Sources/ZenRayDictate/FnKeyMonitor.swift
+grep -q 'addGlobalMonitorForEvents' Sources/ZenRayDictate/FnKeyMonitor.swift
+grep -q 'addLocalMonitorForEvents' Sources/ZenRayDictate/FnKeyMonitor.swift
 grep -q 'windowDidResignKey' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'fadeDuration' Sources/ZenRayDictate/ComposerWindowController.swift
 grep -q 'window.contentMaxSize' Sources/ZenRayDictate/ComposerWindowController.swift
