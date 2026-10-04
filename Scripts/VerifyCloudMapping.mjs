@@ -1,4 +1,4 @@
-// 3 October 2026, 19:42 CEST: re-read immutable project mapping and independently restore selected archived sources.
+// 4 October 2026: verify immutable mapping and restore the live composer, bridge, executable, memory and library.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -28,12 +28,12 @@ const context=await immutable('pages/ZenRayAssets/zenray-dictate/.context.md');
 if(!registry.projects.some(p=>p.id==='zenray-dictate')||!context.text.includes('zenray-dictate'))throw new Error('Project missing from cloud mapping');
 const cloudPaths=snapshot.sources.map(s=>s.localPath).filter(Boolean);if(cloudPaths.length)throw new Error('Local source paths leaked into mapping');
 const state=JSON.parse(await readFile(`${config.storage.stateDir}/Project-zenray-dictate.json`,'utf8'));
-const selected=['application:Sources/ZenRayDictate/GeminiWebTranscriber.swift','application:Sources/ZenRayDictate/Resources/GeminiBridge.js','application:ZenRayDictate.app/Contents/MacOS/ZenRayDictate','project-notes:FEEDBACK.md','library:Library.json'];
+const selected=['application:Sources/ZenRayDictate/GeminiWebTranscriber.swift','application:Sources/ZenRayDictate/Resources/GeminiBridge.js','application:Sources/ZenRayDictate/Resources/GeminiComposer.js','application:ZenRayDictate.app/Contents/MacOS/ZenRayDictate','project-notes:FEEDBACK.md','library:Library.json'];
 const isolated=structuredClone(config);isolated.storage.stateDir=`${root}/CloudVerification/State`;isolated.projects=[];
 const service=await createAssetsService({config:isolated});
 const restored=[];
 try{
  for(const id of selected){const proof=state.backups[id];if(!proof)throw new Error(`Missing archive: ${id}`);const destination=`${root}/CloudVerification/Restored/${proof.sourceId}`;const file=await service.restoreOriginal(proof,destination,{},new AbortController().signal);const sha256=await hashLocalFile(file);if(sha256!==proof.sha256)throw new Error('Restore hash mismatch');restored.push({id,size:proof.size,sha256});}
 }finally{await service.close();}
-const proof={date:'3 October 2026',projectId:snapshot.id,count:live.project.sync.count,backedUpCount:live.project.sync.backedUpCount,pendingCount:0,workspaceBlob:workspace.sha,registryBlob:catalogue.sha,contextBlob:context.sha,mappedSourceIDs:snapshot.sources.map(s=>s.id),restored};
+const proof={date:'4 October 2026',projectId:snapshot.id,count:live.project.sync.count,backedUpCount:live.project.sync.backedUpCount,pendingCount:0,workspaceBlob:workspace.sha,registryBlob:catalogue.sha,contextBlob:context.sha,mappedSourceIDs:snapshot.sources.map(s=>s.id),restored};
 await writeFile(`${root}/CloudMappingProof.json`,JSON.stringify(proof,null,2)+'\n');console.log(JSON.stringify(proof));
