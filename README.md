@@ -1,6 +1,6 @@
 ## 4 October 2026: Immediate 0.1 s out / 0.1 s in result transition
 
-Version 3.6 build 9 begins the right-to-bottom-center transition as soon as the microphone stops. It fades out for 0.1 seconds, relocates while transparent, then fades in for 0.1 seconds. The real Gemini witness measures 0.231538 seconds between animation start and completion, including AppKit scheduling. (4 October 2026)
+Version 3.6 build 9 begins the right-to-bottom-center transition as soon as the microphone stops. It fades out for 0.1 seconds, relocates while transparent, then fades in for 0.1 seconds. The final real Gemini witness measures 0.203240 seconds between animation start and completion, including AppKit scheduling. (4 October 2026)
 
 The 900 ms transcript-stability guard still protects clipboard/history completion, but no longer delays the visible result. Late Gemini edits update the same native DOM in the bottom-center capsule. Clicking outside can dismiss this result while final text settles; completion does not reopen a dismissed capsule. Recording remains visible at right and cancelled/interrupted animations cannot relocate a newer capture. (4 October 2026)
 
