@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 
 // Iteration timestamp: 2026-09-11.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private let composer = ComposerWindowController(window: nil)
     // 3 October 2026, 21:52 CEST: explicit local modes retain their native path without opening Gemini.
@@ -35,7 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMainMenu()
         buildStatusItem()
         LoginItem.enable()
-        showDefaultComposer()
+        if usesWebComposer {
+            TranscriptionPipeline.onLiveState { [weak self] state in self?.updateLiveState(state) }
+            TranscriptionPipeline.prepareGemini()
+        }
 
         configureDictationShortcut()
         commandHotKey.onPress = { [weak self] in self?.flow.beginCommand() }
@@ -46,16 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancelHotKey.onPress = { [weak self] in self?.flow.cancel(); self?.composer.cancelRecording(); if self?.usesWebComposer == true { TranscriptionPipeline.cancelLive() } }
         cancelHotKey.register()
 
-        fnKey.onPress = { [weak self] in
-            guard let self else { return }
-            if DictationLibrary.shared.document.preferences.fnPushToTalk { if self.usesWebComposer { TranscriptionPipeline.startLive() } else { self.flow.pressFn() } }
-            else { self.showDefaultComposer() }
-        }
-        fnKey.onRelease = { [weak self] in
-            guard let self else { return }
-            if DictationLibrary.shared.document.preferences.fnPushToTalk { if self.usesWebComposer { TranscriptionPipeline.stopLive() } else { self.flow.releaseFn() } }
-        }
-        fnKey.onHandsFree = { [weak self] in guard let self else { return }; if self.usesWebComposer { TranscriptionPipeline.liveHandsFree() } else { self.flow.fnSpace() } }
+        // 3 October 2026, 22:15 CEST: one Fn press toggles; releasing Fn never stops the capture.
+        fnKey.onPress = { [weak self] in self?.toggleFlow() }
+        fnKey.onRelease = nil
+        fnKey.onHandsFree = nil
         let fnStarted = fnKey.start()
         Log.write("Fn visibility monitor started: \(fnStarted)")
         if !fnStarted {
@@ -81,7 +78,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = NSImage(
             systemSymbolName: "mic.circle", accessibilityDescription: "ZenRay Dictate"
         )
-        statusItem.menu = buildMenu()
+        statusItem.button?.target=self
+        statusItem.button?.action=#selector(statusIconClicked)
+        statusItem.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
+    }
+
+    // 3 October 2026, 22:15 CEST: left click opens the preview; right click retains settings and advanced actions.
+    @objc private func statusIconClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            let menu=buildMenu();menu.delegate=self;statusItem.menu=menu;statusItem.button?.performClick(nil)
+        } else if usesWebComposer { TranscriptionPipeline.toggleComposer() }
+        else { composer.toggleVisibility() }
+    }
+    func menuDidClose(_ menu:NSMenu) { statusItem.menu=nil }
+    private func updateLiveState(_ state:String) {
+        let recording=state=="recording" || state=="starting"
+        let symbol=recording ? "mic.fill" : state=="finishing" ? "ellipsis.circle" : state=="error" ? "exclamationmark.circle" : "mic.circle"
+        statusItem.button?.image=NSImage(systemSymbolName:symbol,accessibilityDescription:"ZenRay Dictate")
+        statusItem.button?.contentTintColor=recording ? .systemRed : nil
+        statusItem.button?.toolTip=recording ? "Recording · Fn to stop and copy" : state=="finishing" ? "Finishing transcription" : "Click to open Gemini · Fn to start or stop"
     }
 
     private func buildMainMenu() {
@@ -118,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let hint = NSMenuItem(
-            title: "Hold Fn to dictate; double Fn or Fn+Space hands-free; hold ⌃⇧D for commands; ⌘D Gemini mic",
+            title: "Fn starts/stops and copies · left click preview · right click settings",
             action: nil, keyEquivalent: ""
         )
         hint.isEnabled = false
@@ -179,7 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleLoginItem() {
         if LoginItem.isEnabled { LoginItem.disable() } else { LoginItem.enable() }
-        statusItem.menu = buildMenu()
+        statusItem.menu = nil
     }
 
     /// Clicking the Dock icon while the window is hidden must bring it back.
@@ -190,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidResignActive(_ notification: Notification) {
         composer.fadeOut(reason: "app inactive")
+        if usesWebComposer { TranscriptionPipeline.fadeComposer() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

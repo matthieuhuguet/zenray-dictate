@@ -35,6 +35,10 @@ final class TranscriptionPipeline {
     @MainActor static func showGemini() { gemini.showSession() }
     // 3 October 2026, 21:35 CEST: default interaction goes directly to Gemini's live composer.
     @MainActor static func showComposer() { gemini.showComposer() }
+    @MainActor static func prepareGemini() { _ = gemini }
+    @MainActor static func toggleComposer() { gemini.toggleComposer() }
+    @MainActor static func fadeComposer() { gemini.fadeComposer() }
+    @MainActor static func onLiveState(_ handler:@escaping (String)->Void) { gemini.onLiveState=handler }
     @MainActor static func startLive() { gemini.pressFn() }
     @MainActor static func stopLive() { gemini.releaseFn() }
     @MainActor static func toggleLive() { gemini.toggleLiveMicrophone() }

@@ -1,3 +1,13 @@
+## 4 October 2026: Hidden Fn toggle and automatic clipboard
+
+Version 3.2 starts with the Gemini composer hidden. Press Fn once to start the website microphone and once again to stop; releasing Fn keeps recording. Completed dictation is copied automatically to the clipboard and saved in history without retaining audio. Each capture waits for Gemini's final text before copying. Cancellation copies nothing. (4 October 2026)
+
+Left-click the menu-bar icon to open or hide the real Gemini capsule. The preview is 340 points wide, vertically centered at the right edge, with automatic height up to 460 points. Clicking outside fades it away in 0.18 seconds while an active capture continues invisibly. Right-click the icon for settings and the full Google session. Control+D also toggles capture; Control+Q cancels. This section replaces the historical hold-to-talk instructions below for direct Gemini dictation. (4 October 2026)
+
+The native Gemini waveform and built-in MacBook microphone lock remain in use. Whisper, Parakeet and local-only workflows retain their native route. No benchmark is performed. (4 October 2026)
+
+Verification: `node Scripts/VerifyComposerCapture.mjs` checks delayed final text, exactly one completion, separate captures, unchanged drafts, busy requests and cancellation. `Scripts/VerifyFnCapture.swift` exercises the production Fn handlers against real Gemini with synthetic witness audio in a debug verification bundle. Its proof confirms hidden capture, release remaining active, second activation stopping, clipboard completion, right positioning and fade. The physical Fn key itself still requires a keyboard check. (4 October 2026)
+
 ## 3 October 2026: Direct Gemini capsule
 
 The default window now contains Gemini's actual `input-container` DOM, with the website's live microphone. The signed 3.1 app uses a transparent borderless panel, 720 points wide, whose height follows the composer. Its legal footer is hidden in compact mode; the full Gemini session remains available from the menu. (3 October 2026)

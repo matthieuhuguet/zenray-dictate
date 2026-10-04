@@ -50,6 +50,7 @@
     return request.stream;
   };
   window.ZenRayGemini = {
+    isBusy: () => Boolean(active),
     ready: () => Boolean(editor() && button(settings.microphoneLabels) && originalCapture),
     cancel: async () => {
       if (!active) return;
