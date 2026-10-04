@@ -28,7 +28,7 @@ const context=await immutable('pages/ZenRayAssets/zenray-dictate/.context.md');
 if(!registry.projects.some(p=>p.id==='zenray-dictate')||!context.text.includes('zenray-dictate'))throw new Error('Project missing from cloud mapping');
 const cloudPaths=snapshot.sources.map(s=>s.localPath).filter(Boolean);if(cloudPaths.length)throw new Error('Local source paths leaked into mapping');
 const state=JSON.parse(await readFile(`${config.storage.stateDir}/Project-zenray-dictate.json`,'utf8'));
-const selected=['application:Sources/ZenRayDictate/GeminiWebTranscriber.swift','application:Sources/ZenRayDictate/Resources/GeminiBridge.js','application:Sources/ZenRayDictate/Resources/GeminiComposer.js','application:ZenRayDictate.app/Contents/MacOS/ZenRayDictate','project-notes:FEEDBACK.md','library:Library.json'];
+const selected=['application:Sources/ZenRayDictate/FnKeyMonitor.swift','application:Sources/ZenRayDictate/GeminiWebTranscriber.swift','application:Sources/ZenRayDictate/Resources/GeminiBridge.js','application:Sources/ZenRayDictate/Resources/GeminiComposer.js','application:ZenRayDictate.app/Contents/MacOS/ZenRayDictate','project-notes:FEEDBACK.md','library:Library.json'];
 const isolated=structuredClone(config);isolated.storage.stateDir=`${root}/CloudVerification/State`;isolated.projects=[];
 const service=await createAssetsService({config:isolated});
 const restored=[];
