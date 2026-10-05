@@ -52,12 +52,31 @@
       child = parent;
     }
   }
+  // 5 October 2026: sign-in detection prevents hanging or throwing unhandled errors when signed out.
+  const isSignIn = () => {
+    if (location.hostname !== 'gemini.google.com') return true;
+    return Boolean(
+      document.querySelector('a[href*="accounts.google.com"], a[href*="ServiceLogin"], [data-test-id="sign-in-button"]') ||
+      [...document.querySelectorAll('button, a')].some(el => {
+        const text = (el.innerText || '').trim();
+        const aria = (el.getAttribute('aria-label') || '').trim();
+        return /^(Sign in|Connexion|Se connecter)$/i.test(text) || /^(Sign in|Connexion|Se connecter)$/i.test(aria);
+      })
+    );
+  };
   // 3 October 2026, 22:15 CEST: completion follows the website's real stop state, including manual microphone clicks.
   const field = () => document.querySelector(settings.editor);
   const text = () => (field()?.innerText || '').trim();
-  const findButton = pattern => [...document.querySelectorAll('button[aria-label]')].find(el=>!el.disabled&&el.getClientRects().length&&pattern.test(el.getAttribute('aria-label')));
-  const microphone = () => findButton(/^(Dicter|Dictate|Use microphone|Microphone)(?:\s|$)/i);
-  const stopButton = () => findButton(/^(Arrêter la dictée|Stop dictation|Terminer|Done)(?:\s|$)/i);
+  const findButton = pattern => [...document.querySelectorAll('button[aria-label]')].find(el=>!el.disabled&&el.getClientRects().length&&pattern.test(el.getAttribute('aria-label') || ''));
+  const microphone = () => {
+    return findButton(/^(Dicter|Dictate|Use microphone|Microphone|Utiliser le microphone|Activer le microphone)(?:\s|$)/i) ||
+      document.querySelector('button[aria-label*="micro" i]:not([aria-label*="arr[êe]t" i]):not([aria-label*="stop" i])');
+  };
+  const stopButton = () => {
+    return findButton(/^(Arrêter la dictée|Arrêter l'écoute|Arrêter|Stop dictation|Stop listening|Stop|Terminer|Done)(?:\s|$)/i) ||
+      document.querySelector('butterfly-wave-view button, button[aria-label*="arr[êe]t" i], button[aria-label*="stop" i]');
+  };
+  const isWaveformActive = () => Boolean(document.querySelector('butterfly-wave-view canvas'));
   const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
   const notify = payload => window.webkit?.messageHandlers?.liveCapture?.postMessage(payload);
   let capture=null, finalizing=null, lastCompleted='', counter=0;
@@ -80,7 +99,7 @@
         await sleep(settings.pollMs);
         const value=text();
         if(value!==previous){previous=value;changedAt=Date.now();}
-        if(!stopButton() && Date.now()-changedAt>=settings.settleMs){
+        if(!stopButton() && !isWaveformActive() && Date.now()-changedAt>=settings.settleMs){
           const result=previous!==current.baseline ? previous : '';
           if(result)lastCompleted=previous;
           notify({state:'finished',id:current.id,text:result});
@@ -96,28 +115,50 @@
   }
   function observeCapture() {
     if(busy())return;
-    if(stopButton()){opened();if(capture)capture.started=true;}
+    if(stopButton() || isWaveformActive()){opened();if(capture)capture.started=true;}
     else if(capture?.started && !finalizing)finalize().catch(()=>{});
   }
   window.ZenRayComposer = {
     setCompact(value) { compact=Boolean(value);previousRoot=null;lastHeight=0;apply(); },
     async begin() {
       if(busy() || finalizing)throw new Error('Gemini is finishing another request.');
+      if(isSignIn()){notify({state:'signInRequired'});throw new Error('SIGN_IN_REQUIRED');}
       const deadline=Date.now()+settings.readyTimeoutMs;
-      while(!microphone() && !stopButton() && Date.now()<deadline)await sleep(settings.pollMs);
-      if(stopButton()){opened();if(capture)capture.started=true;return;}
+      while(!microphone() && !stopButton() && !isWaveformActive() && Date.now()<deadline){
+        if(isSignIn()){notify({state:'signInRequired'});throw new Error('SIGN_IN_REQUIRED');}
+        await sleep(settings.pollMs);
+      }
+      if(stopButton() || isWaveformActive()){opened();if(capture)capture.started=true;return true;}
       const button=microphone();
       if(!button)throw new Error('Gemini microphone is unavailable. Open the full session to check access.');
       const current=text();
       if(current && current===lastCompleted){
-        const editor=field();editor.focus();const selection=getSelection();const range=document.createRange();
-        range.selectNodeContents(editor);selection.removeAllRanges();selection.addRange(range);document.execCommand('delete');
+        const editor=field();
+        if(editor){
+          try {
+            editor.focus();
+            const selection=getSelection();
+            if(selection){
+              const range=document.createRange();
+              range.selectNodeContents(editor);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              document.execCommand('delete');
+            }
+          } catch(e) {}
+        }
       }
       opened();
       button.click();
-      while(!stopButton() && Date.now()<deadline)await sleep(settings.pollMs);
-      if(stopButton() && capture)capture.started=true;
-      if(!stopButton()){const id=capture?.id;capture=null;notify({state:'error',id,error:'Gemini did not start the microphone.'});throw new Error('Gemini did not start the microphone.');}
+      while(!stopButton() && !isWaveformActive() && Date.now()<deadline)await sleep(settings.pollMs);
+      if((stopButton() || isWaveformActive()) && capture)capture.started=true;
+      if(!stopButton() && !isWaveformActive()){
+        const id=capture?.id;
+        capture=null;
+        notify({state:'error',id,error:'Gemini did not start the microphone.'});
+        throw new Error('Gemini did not start the microphone.');
+      }
+      return true;
     },
     async end() {
       if(busy())throw new Error('Gemini is busy processing saved audio.');
@@ -125,8 +166,8 @@
       return await finalize();
     },
     microphone(stop=false) { return stop ? this.end() : this.begin(); },
-    cancel() { if(capture){capture.cancelled=true;notify({state:'idle',id:capture.id});}stopButton()?.click();capture=null; },
-    state() { const root=document.querySelector(settings.composer);return {origin:location.origin,compact:document.documentElement.hasAttribute('data-zenray-compact'),composer:root?.tagName,editor:!!root?.querySelector(settings.editor),recording:!!stopButton(),finalizing:!!finalizing}; }
+    cancel() { if(capture){capture.cancelled=true;notify({state:'idle',id:capture.id});}stopButton()?.click();capture=null;return true; },
+    state() { const root=document.querySelector(settings.composer);return {origin:location.origin,compact:document.documentElement.hasAttribute('data-zenray-compact'),composer:root?.tagName,editor:!!root?.querySelector(settings.editor),recording:Boolean(stopButton()||isWaveformActive()),finalizing:!!finalizing,signedIn:!isSignIn()}; }
   };
   setInterval(observeCapture,settings.pollMs);
   new MutationObserver(apply).observe(document,{childList:true,subtree:true});

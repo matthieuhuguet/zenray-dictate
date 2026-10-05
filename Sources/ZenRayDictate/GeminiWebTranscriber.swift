@@ -40,7 +40,20 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     private var outsideMonitor: Any?
     private var localMonitor: Any?
     private var lastCaptureID: String?
+    private var retryTask: Task<Void, Never>?
+    private var retryCount = 0
     var onLiveState: ((String) -> Void)?
+
+    // 5 October 2026: auto-reload after network recovery if launched before Wi-Fi connects at login.
+    private func scheduleReload(delay: TimeInterval) {
+        retryTask?.cancel()
+        retryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            Log.write("Retrying Gemini load after network wait (attempt \(self.retryCount))")
+            self.webView.load(URLRequest(url: Settings.url))
+        }
+    }
 
     #if DEBUG
     static var verificationScript: String?
@@ -176,12 +189,39 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     func startLiveMicrophone() {
         guard !liveRecording,!liveStarting,!liveFinishing,continuation==nil else { return }
         do { try BuiltinMicrophone.shared.pin() } catch { showLiveError(error);return }
+        if let host = webView.url?.host, host != Settings.url.host {
+            Log.write("Gemini session is on \(host), showing session window for sign-in")
+            showSession()
+            return
+        }
+        if webView.url == nil {
+            Log.write("Gemini web session not yet loaded; starting load")
+            webView.load(URLRequest(url: Settings.url))
+        }
         stopRequested=false;liveStarting=true;onLiveState?("starting")
         presentRecording()
-        webView.callAsyncJavaScript("const deadline=Date.now()+15000;while(!window.ZenRayComposer && Date.now()<deadline)await new Promise(r=>setTimeout(r,100));if(!window.ZenRayComposer)throw new Error('Gemini has not loaded. Retry once the session is ready.');await window.ZenRayComposer.begin()",arguments:[:],in:nil,in:.page) { [weak self] result in
+        let script = """
+        const deadline=Date.now()+15000;
+        while(!window.ZenRayComposer && Date.now()<deadline)await new Promise(r=>setTimeout(r,100));
+        if(!window.ZenRayComposer)throw new Error('Gemini has not loaded. Retry once the session is ready.');
+        await window.ZenRayComposer.begin();
+        return true;
+        """
+        webView.callAsyncJavaScript(script,arguments:[:],in:nil,in:.page) { [weak self] result in
             guard let self else { return }
             self.liveStarting=false
-            if case let .failure(error)=result { self.liveRecording=false;self.showLiveError(error);return }
+            if case let .failure(error)=result {
+                self.liveRecording=false
+                let nsError = error as NSError
+                let jsMessage = (nsError.userInfo["WKJavaScriptExceptionMessage"] as? String) ?? error.localizedDescription
+                if jsMessage.contains("SIGN_IN_REQUIRED") || jsMessage.contains("Sign in") {
+                    Log.write("Gemini requires sign in; opening session window")
+                    self.showSession()
+                    return
+                }
+                self.showLiveError(error)
+                return
+            }
             self.liveRecording=true;self.onLiveState?("recording")
             if self.stopRequested { self.stopLiveMicrophone() }
         }
@@ -190,7 +230,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         if liveStarting { stopRequested=true;return }
         guard liveRecording,!liveFinishing else { return }
         liveFinishing=true;onLiveState?("finishing")
-        webView.callAsyncJavaScript("await window.ZenRayComposer.end()",arguments:[:],in:nil,in:.page) { [weak self] result in
+        webView.callAsyncJavaScript("await window.ZenRayComposer.end();return true;",arguments:[:],in:nil,in:.page) { [weak self] result in
             guard let self else { return }
             self.liveRecording=false;self.liveFinishing=false
             if case let .failure(error)=result { self.showLiveError(error) }
@@ -208,9 +248,16 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         if compact { sessionWindow.orderOut(nil) }
     }
     private func showLiveError(_ error:Error) {
-        onLiveState?("error");Log.write("Gemini live microphone: \(error.localizedDescription)")
+        onLiveState?("error")
+        let nsError = error as NSError
+        let jsMessage = (nsError.userInfo["WKJavaScriptExceptionMessage"] as? String) ?? error.localizedDescription
+        Log.write("Gemini live microphone: \(jsMessage)")
+        if jsMessage.contains("SIGN_IN_REQUIRED") || jsMessage.contains("Sign in") {
+            showSession()
+            return
+        }
         showComposer()
-        let alert=NSAlert();alert.messageText="Gemini dictation unavailable";alert.informativeText=error.localizedDescription
+        let alert=NSAlert();alert.messageText="Gemini dictation unavailable";alert.informativeText=jsMessage
         alert.beginSheetModal(for:sessionWindow)
     }
 
@@ -320,7 +367,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             pending.resume(with:result)
         }
         if case .failure = result {
-            webView.callAsyncJavaScript("await window.ZenRayGemini?.cancel()",arguments:[:],in:nil,in:.page) { _ in complete() }
+            webView.callAsyncJavaScript("await window.ZenRayComposer?.cancel();await window.ZenRayGemini?.cancel();return true;",arguments:[:],in:nil,in:.page) { _ in complete() }
         } else { complete() }
     }
 
@@ -328,6 +375,12 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         if message.name == "liveCapture" {
             guard message.frameInfo.isMainFrame,message.frameInfo.securityOrigin.host==Settings.url.host,continuation==nil,
                   let payload=message.body as? [String:Any],let state=payload["state"] as? String else { return }
+            if state=="signInRequired" {
+                liveRecording=false;liveStarting=false;liveFinishing=false;onLiveState?("idle")
+                Log.write("Gemini liveCapture reported signInRequired; opening session window")
+                showSession()
+                return
+            }
             if state=="recording" { liveRecording=true;presentRecording();onLiveState?(state);return }
             if state=="finishing" { liveRecording=false;liveFinishing=true;onLiveState?(state);transitionToResult();return }
             if state=="error" { liveRecording=false;liveStarting=false;liveFinishing=false;showLiveError(TranscriptionError.geminiUnavailable(payload["error"] as? String ?? "Gemini capture failed."));return }
@@ -376,20 +429,46 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        retryCount = 0
+        retryTask?.cancel()
+        retryTask = nil
+        if let host = webView.url?.host, host != Settings.url.host {
+            Log.write("Gemini loaded host \(host); opening session window for login")
+            showSession()
+            return
+        }
         webView.evaluateJavaScript("window.ZenRayComposer?.setCompact(\(compact ? "true" : "false"))")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(.failure(error)) }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(.failure(error)) }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        Log.write("Gemini provisional navigation failed: \(error.localizedDescription)")
+        finish(.failure(error))
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            retryCount += 1
+            let delay = min(30.0, pow(2.0, Double(min(retryCount, 4))))
+            scheduleReload(delay: delay)
+        }
+    }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         finish(.failure(TranscriptionError.geminiUnavailable("Gemini web session stopped; retry the saved recording.")))
         webView.reload()
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url, url.scheme == "https",
-              let host = url.host, host == "gemini.google.com" || host == "accounts.google.com" else {
-            decisionHandler(.cancel); return
+        guard let url = navigationAction.request.url, url.scheme == "https", let host = url.host else {
+            decisionHandler(.cancel)
+            return
+        }
+        let isGoogle = host == "gemini.google.com" || host.hasSuffix(".google.com") || host.hasSuffix(".google.fr") || host.hasSuffix(".gstatic.com") || host.hasSuffix(".googleapis.com") || host.hasSuffix(".googleusercontent.com") || host.hasSuffix(".youtube.com")
+        if !isGoogle {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+            return
+        }
+        if host != Settings.url.host {
+            showSession()
         }
         decisionHandler(.allow)
     }
