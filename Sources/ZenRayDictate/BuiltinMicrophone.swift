@@ -4,6 +4,8 @@ import Foundation
 // 3 October 2026, 21:55 CEST: pin only the default input, keeping AirPods output independent.
 final class BuiltinMicrophone: @unchecked Sendable {
     static let shared = BuiltinMicrophone()
+    // 6 October 2026, 12:42 CEST: respect the system input instead of locking the MacBook microphone.
+    static let lockingEnabled = false
     private let system = AudioObjectID(kAudioObjectSystemObject)
     private var listening = false
     private var listener: AudioObjectPropertyListenerBlock?
@@ -41,6 +43,7 @@ final class BuiltinMicrophone: @unchecked Sendable {
     func currentInput() throws -> AudioDeviceID { try number(system,kAudioHardwarePropertyDefaultInputDevice) }
     func currentOutput() throws -> AudioDeviceID { try number(system,kAudioHardwarePropertyDefaultOutputDevice) }
     func pin() throws {
+        guard Self.lockingEnabled else { return }
         let device=try builtInDevice()
         if try currentInput() != device {
             var property=address(kAudioHardwarePropertyDefaultInputDevice),selected=device
@@ -49,6 +52,7 @@ final class BuiltinMicrophone: @unchecked Sendable {
         guard try currentInput()==device else { throw NSError(domain:"ZenRayDictate.AudioInput",code:2,userInfo:[NSLocalizedDescriptionKey:"The MacBook microphone selection did not take effect."]) }
     }
     func start() throws {
+        guard Self.lockingEnabled else { return }
         try pin()
         guard !listening else { return }
         let callback:AudioObjectPropertyListenerBlock = { [weak self] _, _ in

@@ -4,12 +4,15 @@ import Foundation
 @main struct VerifyBuiltinMicrophone {
     static func main() throws {
         let input=BuiltinMicrophone.shared
+        // 6 October 2026, 12:44 CEST: verify startup and capture hooks preserve the selected system input.
+        let inputBefore=try input.currentInput()
         let outputBefore=try input.currentOutput()
         try input.start()
         defer { input.stop() }
-        let expected=try input.builtInDevice(),actual=try input.currentInput(),outputAfter=try input.currentOutput()
-        guard expected==actual,outputBefore==outputAfter else { fatalError("Input pin or output preservation failed") }
-        let proof:[String:Any] = ["date":"3 October 2026","input":try input.name(actual),"inputID":actual,"builtinID":expected,"output":try input.name(outputAfter),"outputUnchanged":outputBefore==outputAfter]
+        try input.pin()
+        let expected=inputBefore,actual=try input.currentInput(),outputAfter=try input.currentOutput()
+        guard expected==actual,outputBefore==outputAfter else { fatalError("System input or output preservation failed") }
+        let proof:[String:Any] = ["date":"6 October 2026","input":try input.name(actual),"inputID":actual,"previousInputID":expected,"output":try input.name(outputAfter),"outputUnchanged":outputBefore==outputAfter]
         print(String(data:try JSONSerialization.data(withJSONObject:proof,options:[.sortedKeys]),encoding:.utf8)!)
     }
 }

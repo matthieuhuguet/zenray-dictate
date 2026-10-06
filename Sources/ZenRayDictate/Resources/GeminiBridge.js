@@ -26,12 +26,9 @@
   if (originalCapture) navigator.mediaDevices.getUserMedia = async constraints => {
     const request = active;
     if (!request) {
-      // 3 October 2026, 21:57 CEST: ignore cached AirPods IDs; native CoreAudio pins the built-in default input.
+      // 6 October 2026, 12:42 CEST: use the system microphone without retaining a cached device ID.
       if (!constraints?.audio || constraints.video) return originalCapture(constraints);
       const {deviceId,groupId,...audio} = typeof constraints.audio === 'object' ? constraints.audio : {};
-      const devices = await navigator.mediaDevices.enumerateDevices?.() || [];
-      const builtin = devices.find(device => device.kind === 'audioinput' && /MacBook|built[ -]?in|microphone interne/i.test(device.label));
-      if (builtin) audio.deviceId = {exact:builtin.deviceId};
       return originalCapture({...constraints,audio});
     }
     if (!constraints?.audio || constraints.video) throw new Error('Only saved audio dictation is supported.');
