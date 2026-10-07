@@ -198,7 +198,9 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     func startLiveMicrophone() {
         guard !liveRecording,!liveStarting,!liveFinishing,continuation==nil else { return }
         // 7 October 2026, 11:55 CEST: measure presentation separately from microphone readiness.
-        let presentationStarted = ProcessInfo.processInfo.systemUptime
+        let receivedAt = ProcessInfo.processInfo.systemUptime
+        let physicalPress = FnKeyMonitor.consumePressUptime()
+        let presentationStarted = physicalPress.flatMap { receivedAt >= $0 && receivedAt - $0 < 1 ? $0 : nil } ?? receivedAt
         capturePresentationElapsed = 0; captureFrameElapsed = 0
         do { try BuiltinMicrophone.shared.pin() } catch { showLiveError(error);return }
         if webView.url == nil {

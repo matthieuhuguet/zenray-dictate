@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 test "$(plutil -extract NSMicrophoneUsageDescription raw ZenRayDictate.app/Contents/Info.plist)" != ""
 test "$(plutil -extract CFBundleShortVersionString raw ZenRayDictate.app/Contents/Info.plist)" = "3.7"
-test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "10"
+test "$(plutil -extract CFBundleVersion raw ZenRayDictate.app/Contents/Info.plist)" = "11"
 codesign --verify --deep --strict ZenRayDictate.app
 codesign --display --entitlements :- ZenRayDictate.app 2>/dev/null | grep -q 'com.apple.security.device.audio-input'
 otool -L ZenRayDictate.app/Contents/MacOS/ZenRayDictate | grep -q 'AVFoundation.framework'

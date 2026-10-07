@@ -3,6 +3,12 @@ import CoreGraphics
 
 // 4 October 2026: AppKit monitors cover both our own app and all other apps without a disabled Quartz tap.
 final class FnKeyMonitor {
+    // 7 October 2026, 12:04 CEST: measure the complete physical-key path, including AppKit dispatch delay.
+    private static var pendingPressUptime: TimeInterval?
+    static func consumePressUptime() -> TimeInterval? {
+        defer { pendingPressUptime = nil }
+        return pendingPressUptime
+    }
     var onPress:(()->Void)?
     var onRelease:(()->Void)?
     var onHandsFree:(()->Void)?
@@ -40,12 +46,14 @@ final class FnKeyMonitor {
     // 4 October 2026: process the identical event path in local/global handlers and unit tests; never swallow keyboard events.
     func receive(_ event:NSEvent,source:String) {
         if event.type == .keyDown,event.keyCode==Settings.spaceKeyCode,event.modifierFlags.contains(.function),!event.isARepeat {
+            Self.pendingPressUptime=event.timestamp
             spacePressed=true;onHandsFree?();return
         }
         guard event.type == .flagsChanged,event.keyCode==Settings.fnKeyCode else { return }
         let down=event.modifierFlags.contains(.function)
         guard let edge=keyState.receive(isDown:down) else { return }
         if edge {
+            Self.pendingPressUptime=event.timestamp
             Log.write("Fn AppKit \(source) press; app=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")")
             // Defer changing app/window state until AppKit finishes dispatching this event.
             DispatchQueue.main.async { [weak self] in self?.onPress?() }
