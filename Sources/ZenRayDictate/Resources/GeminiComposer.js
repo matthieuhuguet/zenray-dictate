@@ -13,6 +13,11 @@
     html[data-zenray-compact] [data-zenray-composer] rich-textarea .ql-editor { max-height:340px!important; overflow-y:auto!important; }
     html[data-zenray-compact] [data-zenray-composer] .input-area-container > p { display:none!important; }
     html[data-zenray-compact] .input-area-fieldset { min-width:0!important; padding:0!important; margin:0!important; border:0!important; }
+    /* 7 October 2026, 11:56 CEST: never flash the website's idle placeholder in the prepared dictation capsule. */
+    html[data-zenray-compact] [data-zenray-composer] .ql-editor.ql-blank::before,
+    html[data-zenray-compact] [data-zenray-composer] [data-placeholder]::before { content:none!important; }
+    html[data-zenray-compact] [data-zenray-composer] input::placeholder,
+    html[data-zenray-compact] [data-zenray-composer] textarea::placeholder { color:transparent!important; }
     html[data-zenray-compact] hallucination-disclaimer { display:none!important; }
     html[data-zenray-compact] .cdk-overlay-container { position:fixed!important; z-index:1000!important; }
   `;
@@ -107,7 +112,8 @@
     else if(capture?.started && !finalizing)finalize().catch(()=>{});
   }
   window.ZenRayComposer = {
-    setCompact(value) { compact=Boolean(value);previousRoot=null;lastHeight=0;apply(); },
+    // 7 October 2026, 11:52 CEST: repeated Fn starts reuse the already isolated native composer.
+    setCompact(value) { const next=Boolean(value);if(next===compact)return;compact=next;previousRoot=null;lastHeight=0;apply(); },
     async begin() {
       if(busy() || finalizing)return false;
       const deadline=Date.now()+settings.readyTimeoutMs;

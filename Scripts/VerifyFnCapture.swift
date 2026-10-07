@@ -3,6 +3,11 @@ import AppKit
 // 3 October 2026, 22:20 CEST: exercise the production Fn handlers with synthetic audio and real Gemini transcription.
 @main struct VerifyFnCapture {
     @MainActor static func main() {
+        // 7 October 2026, 12:05 CEST: refuse a second capsule while the production app is running.
+        guard !NSWorkspace.shared.runningApplications.contains(where: { $0.bundleIdentifier == "com.zenray.dictate" }) else {
+            fputs("Verification refused: ZenRayDictate is already running. No second capsule will be opened.\n",stderr)
+            exit(2)
+        }
         fputs("Fn probe boot\n",stderr);fflush(stderr)
         ProcessInfo.processInfo.disableAutomaticTermination("Verification in progress")
         ProcessInfo.processInfo.disableSuddenTermination()
@@ -21,10 +26,15 @@ import AppKit
                     if let state=try? await web.verificationState(),state["ready"] as? Bool==true { fputs("Fn probe ready\n",stderr);fflush(stderr);break }
                     try await Task.sleep(nanoseconds:200_000_000)
                 }
+                // 7 October 2026, 12:01 CEST: verify repeated capture readiness, including the idle placeholder before Fn.
+                for iteration in 0..<5 {
+                states.removeAll()
                 try await web.installVerificationAudio(audio)
                 let clipboard=NSPasteboard.general
                 let previous=clipboard.pasteboardItems?.map { item in item.types.compactMap { type in item.data(forType:type).map{(type,$0)} } } ?? []
                 web.verificationLoseFocus()
+                let idle=try await web.verificationState()
+                guard idle["placeholderSuppressed"] as? Bool==true else { throw NSError(domain:"FnProbe",code:9,userInfo:[NSLocalizedDescriptionKey:"Idle Gemini placeholder is visible"]) }
                 web.pressFn()
                 let startDeadline=Date().addingTimeInterval(15)
                 while Date()<startDeadline {
@@ -33,12 +43,14 @@ import AppKit
                     if states.contains("error") { throw NSError(domain:"FnProbe",code:1,userInfo:[NSLocalizedDescriptionKey:"Gemini could not start the synthetic capture"] ) }
                     try await Task.sleep(nanoseconds:100_000_000)
                 }
+                let presentation=try await web.verificationState()
+                guard let frame=presentation["captureFrameElapsed"] as? Double,frame>0,frame<=0.1 else { throw NSError(domain:"FnProbe",code:10,userInfo:[NSLocalizedDescriptionKey:"Prepared capsule exceeded 100 ms: \(presentation)"]) }
                 web.releaseFn()
                 web.verificationLoseFocus()
                 try await Task.sleep(nanoseconds:4_500_000_000)
                 web.fadeComposer()
                 let recording=try await web.verificationState()
-                guard recording["appActive"] as? Bool==false,recording["recording"] as? Bool==true,recording["presented"] as? Bool==true,recording["alpha"] as? Double==1,recording["width"] as? Double==340,recording["nativeWaveform"] as? Bool==true,let right=recording["right"] as? Double,let screenRight=recording["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Recording did not stay visible with the native waveform at the right edge"] ) }
+                guard recording["appActive"] as? Bool==false,recording["recording"] as? Bool==true,recording["presented"] as? Bool==true,recording["alpha"] as? Double==1,recording["width"] as? Double==340,recording["nativeWaveform"] as? Bool==true,let right=recording["right"] as? Double,let screenRight=recording["screenRight"] as? Double,abs(screenRight-right-18)<1 else { throw NSError(domain:"FnProbe",code:2,userInfo:[NSLocalizedDescriptionKey:"Recording did not stay visible with the native waveform at the right edge: \(recording), states=\(states)"] ) }
                 web.pressFn()
                 let transitionDeadline=Date().addingTimeInterval(0.6)
                 var transitionElapsed:Double=0
@@ -66,14 +78,16 @@ import AppKit
                 web.showComposer()
                 try await Task.sleep(nanoseconds:300_000_000)
                 let shown=try await web.verificationState()
+                fputs("Result geometry: \(shown)\n",stderr)
                 guard shown["presented"] as? Bool==true,shown["width"] as? Double==720,let bottom=shown["bottom"] as? Double,let screenBottom=shown["screenBottom"] as? Double,let center=shown["center"] as? Double,let screenCenter=shown["screenCenter"] as? Double,abs(bottom-screenBottom-24)<1,abs(center-screenCenter)<1 else { throw NSError(domain:"FnProbe",code:4,userInfo:[NSLocalizedDescriptionKey:"Final text is not bottom-centered"] ) }
                 web.fadeComposer()
                 try await Task.sleep(nanoseconds:400_000_000)
                 let hidden=try await web.verificationState()
                 guard hidden["presented"] as? Bool==false,hidden["alpha"] as? Double==0 else { throw NSError(domain:"FnProbe",code:5,userInfo:[NSLocalizedDescriptionKey:"Fade did not hide preview"] ) }
-                let proof:[String:Any]=["date":"4 October 2026","visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"dismissedDuringStabilization":true,"completionDoesNotReopen":true,"transitionElapsed":transitionElapsed,"fadeOutDuration":0.1,"fadeInDuration":0.1,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
+                let proof:[String:Any]=["date":"7 October 2026","iteration":iteration,"placeholderSuppressed":idle["placeholderSuppressed"] ?? false,"capturePresentationElapsed":recording["capturePresentationElapsed"] ?? -1,"captureFrameElapsed":recording["captureFrameElapsed"] ?? -1,"visibleCapture":true,"focusLossDoesNotStop":true,"backgroundStartAndStop":true,"dismissedDuringStabilization":true,"completionDoesNotReopen":true,"transitionElapsed":transitionElapsed,"fadeOutDuration":0.1,"fadeInDuration":0.1,"nativeWaveform":true,"fadeIgnoredWhileRecording":true,"releaseKeepsRecording":true,"secondFnStops":true,"copiedText":copied,"recordingWidth":340,"resultWidth":shown["width"]!,"rightInset":18,"bottomInset":24,"faded":true,"states":states]
                 print(String(data:try JSONSerialization.data(withJSONObject:proof,options:[.sortedKeys]),encoding:.utf8)!)
                 if clipboard.changeCount==stamp { clipboard.clearContents();clipboard.writeObjects(previous.map { formats in let item=NSPasteboardItem();for(type,data)in formats{item.setData(data,forType:type)};return item }) }
+                }
                 fflush(stdout);exit(0)
             } catch { print(error.localizedDescription);fflush(stdout);exit(1) }
         }

@@ -36,6 +36,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     private var resultPresented = false
     private var resultTransitioning = false
     private var resultTransitionElapsed: TimeInterval = 0
+    private var capturePresentationElapsed: TimeInterval = 0
+    private var captureFrameElapsed: TimeInterval = 0
     private var fadeGeneration = 0
     private var outsideMonitor: Any?
     private var localMonitor: Any?
@@ -104,7 +106,10 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             if let self,event.window !== self.sessionWindow,event.window?.level != .statusBar { self.fadeComposer() }
             return event
         }
-        sessionWindow.center()
+        // 7 October 2026, 11:52 CEST: prepare the private web surface without activating or opening the microphone.
+        sessionWindow.alphaValue=0;sessionWindow.ignoresMouseEvents=true
+        prepareCompact()
+        sessionWindow.orderFrontRegardless()
         webView.load(URLRequest(url: Settings.url))
     }
 
@@ -124,7 +129,10 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         sessionWindow.title="ZenRayDictate · Gemini"
         let width=resultPresented ? Settings.resultWidth : Settings.capsuleWidth
         sessionWindow.contentMinSize=NSSize(width:width,height:Settings.capsuleMinimumHeight)
-        sessionWindow.setContentSize(NSSize(width:width,height:Settings.capsuleMinimumHeight))
+        // 7 October 2026, 11:52 CEST: preserve the prepared DOM geometry when the capsule width is unchanged.
+        if sessionWindow.frame.width != width {
+            sessionWindow.setContentSize(NSSize(width:width,height:Settings.capsuleMinimumHeight))
+        }
         positionComposer()
         webView.evaluateJavaScript("window.ZenRayComposer?.setCompact(true)")
     }
@@ -148,7 +156,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
                 guard let self,self.fadeGeneration==generation,!self.composerPresented else { return }
                 self.sessionWindow.ignoresMouseEvents=true
                 // 4 October 2026: keep the hidden page alive until capture completion.
-                if !self.liveRecording && !self.liveStarting && !self.liveFinishing { self.sessionWindow.orderOut(nil) }
+                // 7 October 2026, 11:52 CEST: retain the transparent, noninteractive surface for the next Fn press.
+                self.sessionWindow.orderFrontRegardless()
             }
         })
     }
@@ -188,6 +197,9 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
 
     func startLiveMicrophone() {
         guard !liveRecording,!liveStarting,!liveFinishing,continuation==nil else { return }
+        // 7 October 2026, 11:55 CEST: measure presentation separately from microphone readiness.
+        let presentationStarted = ProcessInfo.processInfo.systemUptime
+        capturePresentationElapsed = 0; captureFrameElapsed = 0
         do { try BuiltinMicrophone.shared.pin() } catch { showLiveError(error);return }
         if webView.url == nil {
             Log.write("Gemini web session not yet loaded; starting load")
@@ -195,6 +207,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         }
         stopRequested=false;liveStarting=true;onLiveState?("starting")
         presentRecording()
+        capturePresentationElapsed = ProcessInfo.processInfo.systemUptime - presentationStarted
         let script = """
         try {
             const deadline = Date.now() + 15000;
@@ -210,29 +223,37 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             return { ok: false, error: e?.message || String(e) };
         }
         """
-        webView.callAsyncJavaScript(script,arguments:[:],in:nil,in:.page) { [weak self] result in
-            guard let self else { return }
-            self.liveStarting=false
-            switch result {
-            case let .success(val):
-                let dict = val as? [String: Any]
-                if dict?["ok"] as? Bool == true {
-                    self.liveRecording = true
-                    self.onLiveState?("recording")
-                    if self.stopRequested { self.stopLiveMicrophone() }
-                } else {
-                    self.liveRecording = false
-                    let err = dict?["error"] as? String ?? "begin_returned_false"
-                    Log.write("Gemini dictation not ready: \(err)")
-                    self.onLiveState?("idle")
-                    self.fadeComposer()
-                    if err == "composer_not_loaded" && self.webView.url == nil {
-                        self.webView.load(URLRequest(url: Settings.url))
+        // 7 October 2026, 11:56 CEST: paint the prepared capsule before Gemini's click can occupy its main thread.
+        webView.callAsyncJavaScript("await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);return true", arguments: [:], in: nil, in: .page) { [weak self] frameResult in
+            guard let self, self.liveStarting else { return }
+            if case .success = frameResult {
+                self.captureFrameElapsed = ProcessInfo.processInfo.systemUptime - presentationStarted
+                Log.write("Gemini capture presentation: native=\(self.capturePresentationElapsed), pageFrame=\(self.captureFrameElapsed) seconds")
+            }
+            self.webView.callAsyncJavaScript(script,arguments:[:],in:nil,in:.page) { [weak self] result in
+                guard let self else { return }
+                self.liveStarting=false
+                switch result {
+                case let .success(val):
+                    let dict = val as? [String: Any]
+                    if dict?["ok"] as? Bool == true {
+                        self.liveRecording = true
+                        self.onLiveState?("recording")
+                        if self.stopRequested { self.stopLiveMicrophone() }
+                    } else {
+                        self.liveRecording = false
+                        let err = dict?["error"] as? String ?? "begin_returned_false"
+                        Log.write("Gemini dictation not ready: \(err)")
+                        self.onLiveState?("idle")
+                        self.fadeComposer()
+                        if err == "composer_not_loaded" && self.webView.url == nil {
+                            self.webView.load(URLRequest(url: Settings.url))
+                        }
                     }
+                case let .failure(error):
+                    self.liveRecording = false
+                    self.showLiveError(error)
                 }
-            case let .failure(error):
-                self.liveRecording = false
-                self.showLiveError(error)
             }
         }
     }
@@ -288,8 +309,8 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
     func verificationLoseFocus() { sessionWindow.resignKey();NSApp.deactivate();windowDidResignKey(Notification(name:NSWindow.didResignKeyNotification,object:sessionWindow)) }
     func verificationState() async throws -> [String:Any] {
-        var result=(try await webView.evaluateJavaScript("({ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
-        result["transitionElapsed"]=resultTransitionElapsed;result["appActive"]=NSApp.isActive;result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
+        var result=(try await webView.evaluateJavaScript("({placeholderSuppressed:(()=>{const e=document.querySelector('.ql-editor');return !!e&&getComputedStyle(e,'::before').content==='none';})(),ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
+        result["capturePresentationElapsed"]=capturePresentationElapsed;result["captureFrameElapsed"]=captureFrameElapsed;result["transitionElapsed"]=resultTransitionElapsed;result["appActive"]=NSApp.isActive;result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
         result["recording"]=liveRecording;result["starting"]=liveStarting;result["finishing"]=liveFinishing
         result["width"]=Double(sessionWindow.frame.width)
         result["right"]=Double(sessionWindow.frame.maxX)

@@ -21,7 +21,7 @@ try{
  await composer.end();assert.equal(messages.at(-1).text,'Second capture.');
  value='Unrelated draft';finalText=value;await composer.begin();value='Unrelated draft';
  assert.equal(await composer.end(),'');assert.equal(value,'Unrelated draft');
- const before=clicks;busy=true;await assert.rejects(()=>composer.begin(),/another request/);assert.equal(clicks,before);busy=false;
+ const before=clicks;busy=true;assert.equal(await composer.begin(),false);assert.equal(clicks,before);busy=false;
  await composer.begin();composer.cancel();await new Promise(r=>setTimeout(r,1100));assert.notEqual(messages.at(-1).state,'finished');
  console.log('Composer capture passed: delayed final text, one completion per capture, separate captures, unchanged draft preserved, busy request rejected, cancel does not copy.');
 }finally{timers.forEach(clearInterval)}
