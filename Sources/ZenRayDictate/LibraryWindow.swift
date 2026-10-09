@@ -176,6 +176,10 @@ private struct LibraryView: View {
                         }
                     }.onChange(of:model.selectedID) { model.chooseRecord() }
                 }.padding().onDrop(of:[UTType.fileURL],isTargeted:nil,perform:model.drop).tabItem { Text("History") }
+                ScrollView {
+                    MicrophoneSwitcherView()
+                        .padding()
+                }.tabItem { Text("Microphone") }
             }
             HStack { Text(model.message).foregroundStyle(.secondary); Spacer(); Button("Save settings, modes and vocabulary") { model.save() } }.padding()
         }.font(.custom(DictationTypography.sans,size:14)).frame(minWidth:740,minHeight:560)

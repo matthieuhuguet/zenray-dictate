@@ -1,5 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
+import CoreAudio
+import SwiftUI
 
 // Iteration timestamp: 2026-09-11.
 @MainActor
@@ -26,12 +28,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     )
     private let fnKey = FnKeyMonitor()
     private var statusItem: NSStatusItem!
+    // 09 October 2026: dedicated popover for the active microphone pill and switcher view.
+    private let microphonePopover = NSPopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Log.write("launched")
-        // 3 October 2026, 21:55 CEST: prevent AirPods reconnection from replacing the built-in input.
-        BuiltinMicrophone.shared.onFailure = { error in Log.write(error.localizedDescription) }
-        do { try BuiltinMicrophone.shared.start() } catch { Log.write(error.localizedDescription) }
+        // 09 October 2026: initialize microphone manager and hook real-time pill updates.
+        MicrophoneManager.shared.startListening()
+        MicrophoneManager.shared.onDeviceChanged = { [weak self] _ in
+            self?.updateStatusItemPill()
+        }
+
         buildMainMenu()
         buildStatusItem()
         LoginItem.enable()
@@ -75,28 +82,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "mic.circle", accessibilityDescription: "ZenRay Dictate"
-        )
-        statusItem.button?.target=self
-        statusItem.button?.action=#selector(statusIconClicked)
-        statusItem.button?.sendAction(on:[.leftMouseUp,.rightMouseUp])
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusIconClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        microphonePopover.behavior = .transient
+        updateStatusItemPill()
     }
 
-    // 3 October 2026, 22:15 CEST: left click opens the preview; right click retains settings and advanced actions.
+    public func updateStatusItemPill(isRecording: Bool = false) {
+        statusItem.button?.image = MicrophoneManager.shared.makePillImage(isRecording: isRecording)
+        let micName = MicrophoneManager.shared.activeDevice?.name ?? "Microphone"
+        let isBt = MicrophoneManager.shared.activeDevice?.transport == .bluetooth
+        let warning = isBt ? " (Attention: Casque Bluetooth actif)" : ""
+        statusItem.button?.toolTip = "ZenRay Dictate · Micro actif : \(micName)\(warning) · Clic pour permuter"
+    }
+
+    // 09 October 2026: left click opens the visual microphone switcher popover; right click opens the full menu.
     @objc private func statusIconClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            let menu=buildMenu();menu.delegate=self;statusItem.menu=menu;statusItem.button?.performClick(nil)
-        } else if usesWebComposer { TranscriptionPipeline.toggleComposer() }
-        else { composer.toggleVisibility() }
+            if microphonePopover.isShown { microphonePopover.performClose(nil) }
+            let menu = buildMenu()
+            menu.delegate = self
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+        } else {
+            showMicrophoneSwitcher()
+        }
     }
-    func menuDidClose(_ menu:NSMenu) { statusItem.menu=nil }
-    private func updateLiveState(_ state:String) {
-        let recording=state=="recording" || state=="starting"
-        let symbol=recording ? "mic.fill" : state=="finishing" ? "ellipsis.circle" : state=="error" ? "exclamationmark.circle" : "mic.circle"
-        statusItem.button?.image=NSImage(systemSymbolName:symbol,accessibilityDescription:"ZenRay Dictate")
-        statusItem.button?.contentTintColor=recording ? .systemRed : nil
-        statusItem.button?.toolTip=recording ? "Recording · Fn to stop and copy" : state=="finishing" ? "Finishing transcription" : "Click to open Gemini · Fn to start or stop"
+
+    @objc public func showMicrophoneSwitcher() {
+        if microphonePopover.isShown {
+            microphonePopover.performClose(nil)
+        } else if let button = statusItem.button {
+            let rootView = MicrophoneSwitcherView(onClose: { [weak self] in
+                self?.microphonePopover.performClose(nil)
+            })
+            microphonePopover.contentViewController = NSHostingController(rootView: rootView)
+            microphonePopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        statusItem.menu = nil
+    }
+
+    private func updateLiveState(_ state: String) {
+        let recording = (state == "recording" || state == "starting")
+        updateStatusItemPill(isRecording: recording)
     }
 
     private func buildMainMenu() {
@@ -140,6 +172,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(hint)
         menu.addItem(.separator())
 
+        // 09 October 2026: visual active microphone indicator and switcher submenu
+        let activeName = MicrophoneManager.shared.activeDevice?.name ?? "Microphone"
+        let activeTransport = MicrophoneManager.shared.activeDevice?.transport.rawValue ?? ""
+        let activeItem = NSMenuItem(
+            title: "🎙️ Micro actif : \(activeName) (\(activeTransport))",
+            action: #selector(showMicrophoneSwitcher),
+            keyEquivalent: ""
+        )
+        activeItem.target = self
+        menu.addItem(activeItem)
+
+        let switchSubmenu = NSMenu(title: "Changer de micro")
+        for device in MicrophoneManager.shared.availableDevices {
+            let isCurrent = (device.id == MicrophoneManager.shared.activeDevice?.id)
+            let item = NSMenuItem(
+                title: "\(device.name) [\(device.transport.rawValue)]",
+                action: #selector(menuSwitchMicrophone(_:)),
+                keyEquivalent: ""
+            )
+            item.representedObject = device.id
+            item.state = isCurrent ? .on : .off
+            item.target = self
+            switchSubmenu.addItem(item)
+        }
+        switchSubmenu.addItem(.separator())
+        let lockItem = NSMenuItem(
+            title: "Verrouiller sur le micro MacBook Pro",
+            action: #selector(toggleLockBuiltIn),
+            keyEquivalent: ""
+        )
+        lockItem.state = MicrophoneManager.shared.isLockedToBuiltIn ? .on : .off
+        lockItem.target = self
+        switchSubmenu.addItem(lockItem)
+
+        let switchMenuItem = NSMenuItem(title: "Vue switch des micros...", action: #selector(showMicrophoneSwitcher), keyEquivalent: "")
+        switchMenuItem.target = self
+        switchMenuItem.submenu = switchSubmenu
+        menu.addItem(switchMenuItem)
+        menu.addItem(.separator())
+
         add(menu, "Library, History and Settings", #selector(showLibrary))
         add(menu, "Hands-free dictation", #selector(toggleFlow))
         add(menu, "Command Mode", #selector(toggleCommandMode))
@@ -162,6 +234,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
+    }
+
+    @objc private func menuSwitchMicrophone(_ sender: NSMenuItem) {
+        if let deviceID = sender.representedObject as? AudioDeviceID {
+            MicrophoneManager.shared.switchToDevice(id: deviceID)
+        }
+    }
+
+    @objc private func toggleLockBuiltIn() {
+        MicrophoneManager.shared.isLockedToBuiltIn.toggle()
     }
 
     private func add(_ menu: NSMenu, _ title: String, _ action: Selector) {

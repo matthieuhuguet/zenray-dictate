@@ -1,6 +1,6 @@
 import AppKit
 
-// 3 October 2026, 16:05 CEST: the recording capsule never activates or steals the target application's focus.
+@MainActor
 final class DictationCapsule {
     private let panel: NSPanel
     private let label = NSTextField(labelWithString: "Ready")
@@ -27,7 +27,10 @@ final class DictationCapsule {
         panel.ignoresMouseEvents = true
     }
     func show(_ text: String) {
-        label.stringValue = text
+        let mic = MicrophoneManager.shared.activeDevice?.shortName ?? "MacBook Pro"
+        let isBt = (MicrophoneManager.shared.activeDevice?.transport == .bluetooth)
+        label.stringValue = "\(text) · 🎙️ \(mic)"
+        label.textColor = isBt ? NSColor(srgbRed: 1.0, green: 0.45, blue: 0.0, alpha: 1.0) : NSColor.labelColor
         if let screen = NSScreen.main {
             let rect = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(x:rect.midX-Tokens.width/2,y:rect.minY+Tokens.inset))

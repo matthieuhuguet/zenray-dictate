@@ -43,13 +43,14 @@ final class BuiltinMicrophone: @unchecked Sendable {
     func currentInput() throws -> AudioDeviceID { try number(system,kAudioHardwarePropertyDefaultInputDevice) }
     func currentOutput() throws -> AudioDeviceID { try number(system,kAudioHardwarePropertyDefaultOutputDevice) }
     func pin() throws {
-        guard Self.lockingEnabled else { return }
-        let device=try builtInDevice()
+        // 09 October 2026: respect the user lock setting from MicrophoneManager and Switcher view
+        let isLocked = UserDefaults.standard.bool(forKey: "ZenRayDictate.LockToBuiltIn")
+        guard isLocked else { return }
+        let device = try builtInDevice()
         if try currentInput() != device {
-            var property=address(kAudioHardwarePropertyDefaultInputDevice),selected=device
-            try check(AudioObjectSetPropertyData(system,&property,0,nil,UInt32(MemoryLayout<AudioDeviceID>.size),&selected))
+            var property = address(kAudioHardwarePropertyDefaultInputDevice), selected = device
+            try check(AudioObjectSetPropertyData(system, &property, 0, nil, UInt32(MemoryLayout<AudioDeviceID>.size), &selected))
         }
-        guard try currentInput()==device else { throw NSError(domain:"ZenRayDictate.AudioInput",code:2,userInfo:[NSLocalizedDescriptionKey:"The MacBook microphone selection did not take effect."]) }
     }
     func start() throws {
         guard Self.lockingEnabled else { return }
