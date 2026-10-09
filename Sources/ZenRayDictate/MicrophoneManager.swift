@@ -245,34 +245,19 @@ public final class MicrophoneManager: ObservableObject {
     }
 
     public func makePillImage(isRecording: Bool = false) -> NSImage {
-        let micName = activeDevice?.shortName ?? "Micro"
-        let isBt = (activeDevice?.transport == .bluetooth)
-        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: NSColor.white
-        ]
-        let textSize = (micName as NSString).size(withAttributes: attrs)
-        let iconSize: CGFloat = 11
-        let spacing: CGFloat = 4
-        let hPadding: CGFloat = 7
+        // 09 October 2026: compact orange pill with microphone icon only, matching macOS privacy indicator style
         let height: CGFloat = 20
-        let width = hPadding * 2 + iconSize + spacing + ceil(textSize.width)
+        let width: CGFloat = 32
+        let iconSize: CGFloat = 11
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
             let bgPath = NSBezierPath(roundedRect: rect, xRadius: height / 2, yRadius: height / 2)
-            let bgColor: NSColor
-            if isRecording {
-                bgColor = NSColor(srgbRed: 0.90, green: 0.15, blue: 0.15, alpha: 1.0)
-            } else if isBt {
-                bgColor = NSColor(srgbRed: 0.92, green: 0.28, blue: 0.12, alpha: 1.0)
-            } else {
-                bgColor = NSColor(srgbRed: 1.0, green: 0.48, blue: 0.02, alpha: 1.0)
-            }
-            bgColor.setFill()
+            // Always vibrant Apple system orange, never red
+            let orangeColor = NSColor(srgbRed: 1.0, green: 0.50, blue: 0.0, alpha: 1.0)
+            orangeColor.setFill()
             bgPath.fill()
 
-            let iconName = isRecording ? "record.circle.fill" : "mic.fill"
+            let iconName = "mic.fill"
             if let micSymbol = NSImage(systemSymbolName: iconName, accessibilityDescription: nil) {
                 let config = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .bold)
                 if let configured = micSymbol.withSymbolConfiguration(config) {
@@ -281,14 +266,12 @@ public final class MicrophoneManager: ObservableObject {
                     NSColor.white.set()
                     NSRect(origin: .zero, size: tinted.size).fill(using: .sourceAtop)
                     tinted.unlockFocus()
-                    let iconRect = NSRect(x: hPadding, y: (height - iconSize) / 2, width: iconSize, height: iconSize)
+                    let iconX = (width - iconSize) / 2
+                    let iconY = (height - iconSize) / 2
+                    let iconRect = NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize)
                     tinted.draw(in: iconRect)
                 }
             }
-
-            let textY = (height - textSize.height) / 2
-            let textRect = NSRect(x: hPadding + iconSize + spacing, y: textY, width: ceil(textSize.width), height: textSize.height)
-            (micName as NSString).draw(in: textRect, withAttributes: attrs)
             return true
         }
 

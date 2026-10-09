@@ -56,11 +56,7 @@ public struct MicrophoneSwitcherView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .background(
-                    manager.activeDevice?.transport == .bluetooth
-                        ? Color(red: 0.92, green: 0.28, blue: 0.12)
-                        : Color(red: 1.0, green: 0.48, blue: 0.02)
-                )
+                .background(Color(red: 1.0, green: 0.50, blue: 0.0))
                 .clipShape(Capsule())
                 .shadow(color: Color.black.opacity(0.12), radius: 3, x: 0, y: 1)
 

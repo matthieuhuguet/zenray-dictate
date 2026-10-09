@@ -91,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     public func updateStatusItemPill(isRecording: Bool = false) {
         statusItem.button?.image = MicrophoneManager.shared.makePillImage(isRecording: isRecording)
+        statusItem.button?.title = ""
         let micName = MicrophoneManager.shared.activeDevice?.name ?? "Microphone"
         let isBt = MicrophoneManager.shared.activeDevice?.transport == .bluetooth
         let warning = isBt ? " (Attention: Casque Bluetooth actif)" : ""
