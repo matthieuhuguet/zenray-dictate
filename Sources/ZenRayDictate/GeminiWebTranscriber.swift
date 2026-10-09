@@ -106,10 +106,11 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             if let self,event.window !== self.sessionWindow,event.window?.level != .statusBar { self.fadeComposer() }
             return event
         }
-        // 7 October 2026, 11:52 CEST: prepare the private web surface without activating or opening the microphone.
-        sessionWindow.alphaValue=0;sessionWindow.ignoresMouseEvents=true
+        // 09 October 2026: prepare the private web surface without ordering an invisible window front,
+        // preventing WindowServer from keeping a floating auxiliary layer on-screen across Spaces.
+        sessionWindow.alphaValue = 0; sessionWindow.ignoresMouseEvents = true
         prepareCompact()
-        sessionWindow.orderFrontRegardless()
+        sessionWindow.orderOut(nil)
         webView.load(URLRequest(url: Settings.url))
     }
 
@@ -154,10 +155,9 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         },completionHandler:{ [weak self] in
             Task { @MainActor in
                 guard let self,self.fadeGeneration==generation,!self.composerPresented else { return }
-                self.sessionWindow.ignoresMouseEvents=true
-                // 4 October 2026: keep the hidden page alive until capture completion.
-                // 7 October 2026, 11:52 CEST: retain the transparent, noninteractive surface for the next Fn press.
-                self.sessionWindow.orderFrontRegardless()
+                self.sessionWindow.ignoresMouseEvents = true
+                // 09 October 2026: order out the window when hidden so it never stays composited on Spaces.
+                self.sessionWindow.orderOut(nil)
             }
         })
     }
