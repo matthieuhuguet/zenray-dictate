@@ -364,32 +364,62 @@ public final class MicrophoneManager: ObservableObject {
     }
 
     public func makePillImage(isRecording: Bool = false) -> NSImage {
-        // 09 October 2026: compact orange pill with microphone icon only, matching macOS privacy indicator style
+        // 10 October 2026: pure vector orange pill (0.5 pt inset to avoid outer edge clipping) and vector microphone glyph
+        // avoiding NSSymbolImageRep lockFocus bounding-box clipping at top and sides.
         let height: CGFloat = 20
         let width: CGFloat = 32
-        let iconSize: CGFloat = 11
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
-            let bgPath = NSBezierPath(roundedRect: rect, xRadius: height / 2, yRadius: height / 2)
+            let pillRect = rect.insetBy(dx: 0.5, dy: 0.5)
+            let bgPath = NSBezierPath(roundedRect: pillRect, xRadius: pillRect.height / 2, yRadius: pillRect.height / 2)
             let orangeColor = NSColor(srgbRed: 1.0, green: 0.50, blue: 0.0, alpha: 1.0)
             orangeColor.setFill()
             bgPath.fill()
 
-            let iconName = "mic.fill"
-            if let micSymbol = NSImage(systemSymbolName: iconName, accessibilityDescription: nil) {
-                let config = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .bold)
-                if let configured = micSymbol.withSymbolConfiguration(config) {
-                    let tinted = configured.copy() as! NSImage
-                    tinted.lockFocus()
-                    NSColor.white.set()
-                    NSRect(origin: .zero, size: tinted.size).fill(using: .sourceAtop)
-                    tinted.unlockFocus()
-                    let iconX = (width - iconSize) / 2
-                    let iconY = (height - iconSize) / 2
-                    let iconRect = NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize)
-                    tinted.draw(in: iconRect)
-                }
-            }
+            NSColor.white.setFill()
+            NSColor.white.setStroke()
+
+            let cx = width / 2.0
+            let strokeW: CGFloat = 1.35
+
+            // 10 October 2026: microphone capsule dome (centered, y = 9.2..16.0)
+            let capW: CGFloat = 3.8
+            let capH: CGFloat = 6.8
+            let capY: CGFloat = 9.2
+            let capRect = NSRect(x: cx - capW / 2.0, y: capY, width: capW, height: capH)
+            let capPath = NSBezierPath(roundedRect: capRect, xRadius: capW / 2.0, yRadius: capW / 2.0)
+            capPath.fill()
+
+            // 10 October 2026: U-shaped cradle around the capsule with rounded caps
+            let cradle = NSBezierPath()
+            let r: CGFloat = 3.55
+            let arcCY: CGFloat = 11.1
+            let armTopY: CGFloat = 11.8
+            cradle.move(to: NSPoint(x: cx - r, y: armTopY))
+            cradle.line(to: NSPoint(x: cx - r, y: arcCY))
+            cradle.appendArc(withCenter: NSPoint(x: cx, y: arcCY), radius: r, startAngle: 180, endAngle: 360, clockwise: false)
+            cradle.line(to: NSPoint(x: cx + r, y: armTopY))
+            cradle.lineWidth = strokeW
+            cradle.lineCapStyle = .round
+            cradle.stroke()
+
+            // 10 October 2026: vertical stem and horizontal base with rounded caps (bottom at y = 4.0)
+            let baseY: CGFloat = 4.7
+            let stem = NSBezierPath()
+            stem.move(to: NSPoint(x: cx, y: arcCY - r))
+            stem.line(to: NSPoint(x: cx, y: baseY))
+            stem.lineWidth = strokeW
+            stem.lineCapStyle = .round
+            stem.stroke()
+
+            let base = NSBezierPath()
+            let baseHalfW: CGFloat = 2.35
+            base.move(to: NSPoint(x: cx - baseHalfW, y: baseY))
+            base.line(to: NSPoint(x: cx + baseHalfW, y: baseY))
+            base.lineWidth = strokeW
+            base.lineCapStyle = .round
+            base.stroke()
+
             return true
         }
 
