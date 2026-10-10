@@ -3,23 +3,33 @@ import CoreAudio
 import Foundation
 import Combine
 
-// 09 October 2026: centralized microphone management, live observation, switching and auto-lock.
+// 10 October 2026: centralized microphone observation, switching between MacBook Pro and iPhone Continuity,
+// and automatic restoration when Bluetooth headsets (AirPods, WH-1000XM3/XM5) hijack the system input.
 public enum MicTransport: String, CaseIterable {
     case builtIn = "Intégré"
-    case bluetooth = "Bluetooth"
     case continuity = "iPhone"
     case usb = "USB"
+    case bluetooth = "Bluetooth"
     case virtual = "Virtuel"
     case unknown = "Autre"
 
     public var iconName: String {
         switch self {
         case .builtIn: return "laptopcomputer"
-        case .bluetooth: return "headphones"
         case .continuity: return "iphone"
         case .usb: return "mic.fill"
+        case .bluetooth: return "headphones"
         case .virtual: return "waveform.circle"
         case .unknown: return "mic"
+        }
+    }
+
+    public var isPreferredPhysicalMic: Bool {
+        switch self {
+        case .builtIn, .continuity, .usb:
+            return true
+        case .bluetooth, .virtual, .unknown:
+            return false
         }
     }
 }
@@ -38,16 +48,12 @@ public struct AudioInputDevice: Identifiable, Equatable {
 public final class MicrophoneManager: ObservableObject {
     public static let shared = MicrophoneManager()
 
+    private static let preferredUIDKey = "ZenRayDictate.PreferredInputUID"
+    private static let legacyLockKey = "ZenRayDictate.LockToBuiltIn"
+
     @Published public private(set) var activeDevice: AudioInputDevice?
     @Published public private(set) var availableDevices: [AudioInputDevice] = []
-    @Published public var isLockedToBuiltIn: Bool {
-        didSet {
-            UserDefaults.standard.set(isLockedToBuiltIn, forKey: "ZenRayDictate.LockToBuiltIn")
-            if isLockedToBuiltIn {
-                enforceBuiltInIfNeeded()
-            }
-        }
-    }
+    @Published public private(set) var allInputDevices: [AudioInputDevice] = []
 
     public var onDeviceChanged: ((AudioInputDevice?) -> Void)?
 
@@ -55,13 +61,22 @@ public final class MicrophoneManager: ObservableObject {
     private var defaultInputListener: AudioObjectPropertyListenerBlock?
     private var devicesListener: AudioObjectPropertyListenerBlock?
     private var isListening = false
+    private var isRestoringPreferred = false
+
+    public var preferredInputUID: String {
+        get {
+            UserDefaults.standard.string(forKey: Self.preferredUIDKey) ?? "BuiltInMicrophoneDevice"
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.preferredUIDKey)
+        }
+    }
 
     private init() {
-        if UserDefaults.standard.object(forKey: "ZenRayDictate.LockToBuiltIn") == nil {
-            UserDefaults.standard.set(true, forKey: "ZenRayDictate.LockToBuiltIn")
-        }
-        self.isLockedToBuiltIn = UserDefaults.standard.bool(forKey: "ZenRayDictate.LockToBuiltIn")
+        // 10 October 2026: disable legacy forced built-in-only lock so iPhone Continuity can be freely selected.
+        UserDefaults.standard.set(false, forKey: Self.legacyLockKey)
         refreshDevices()
+        ensurePreferredNonBluetoothInput()
         startListening()
     }
 
@@ -77,9 +92,7 @@ public final class MicrophoneManager: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.refreshDevices()
-                if self.isLockedToBuiltIn {
-                    self.enforceBuiltInIfNeeded()
-                }
+                self.ensurePreferredNonBluetoothInput()
             }
         }
         _ = AudioObjectAddPropertyListenerBlock(systemObject, &defaultInputAddr, .main, inputCallback)
@@ -94,9 +107,14 @@ public final class MicrophoneManager: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.refreshDevices()
-                if self.isLockedToBuiltIn {
-                    self.enforceBuiltInIfNeeded()
-                }
+                self.ensurePreferredNonBluetoothInput()
+                // 10 October 2026: re-check after 200 ms and 600 ms when AirPods in-ear detection triggers delayed dIn switch.
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                self.refreshDevices()
+                self.ensurePreferredNonBluetoothInput()
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                self.refreshDevices()
+                self.ensurePreferredNonBluetoothInput()
             }
         }
         _ = AudioObjectAddPropertyListenerBlock(systemObject, &devicesAddr, .main, devicesCallback)
@@ -126,7 +144,7 @@ public final class MicrophoneManager: ObservableObject {
         )
         _ = AudioObjectGetPropertyData(systemObject, &defAddr, 0, nil, &defSize, &defIn)
 
-        var list: [AudioInputDevice] = []
+        var allList: [AudioInputDevice] = []
         var active: AudioInputDevice?
 
         for id in ids {
@@ -140,7 +158,11 @@ public final class MicrophoneManager: ObservableObject {
                 continue
             }
 
-            var nameAddr = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertyName, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            var nameAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioObjectPropertyName,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
             var nameSize = UInt32(MemoryLayout<CFString?>.size)
             var nameCF: CFString?
             _ = withUnsafeMutablePointer(to: &nameCF) { ptr in
@@ -148,7 +170,11 @@ public final class MicrophoneManager: ObservableObject {
             }
             let name = (nameCF as String?) ?? "Microphone"
 
-            var uidAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceUID, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            var uidAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceUID,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
             var uidSize = UInt32(MemoryLayout<CFString?>.size)
             var uidCF: CFString?
             _ = withUnsafeMutablePointer(to: &uidCF) { ptr in
@@ -156,24 +182,28 @@ public final class MicrophoneManager: ObservableObject {
             }
             let uid = (uidCF as String?) ?? ""
 
-            var rateAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            var rateAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyNominalSampleRate,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
             var rateSize = UInt32(MemoryLayout<Float64>.size)
             var sampleRate: Float64 = 0
             _ = AudioObjectGetPropertyData(id, &rateAddr, 0, nil, &rateSize, &sampleRate)
-
-            let transport: MicTransport
-            if uid.contains("BuiltIn") || name.contains("MacBook") {
-                transport = .builtIn
-            } else if uid.contains(":input") || name.contains("WH-1000") || name.contains("AirPods") {
-                transport = .bluetooth
-            } else if uid.contains("Continuity") || name.contains("iPhone") {
-                transport = .continuity
-            } else if uid.contains("Loopback") || name.contains("Teams") {
-                transport = .virtual
-            } else {
-                transport = .usb
+            if sampleRate <= 0 {
+                continue
             }
 
+            var transportCode: UInt32 = 0
+            var transSize = UInt32(MemoryLayout<UInt32>.size)
+            var transAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyTransportType,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            _ = AudioObjectGetPropertyData(id, &transAddr, 0, nil, &transSize, &transportCode)
+
+            let transport = classifyTransport(code: transportCode, uid: uid, name: name)
             let shortName = cleanShortName(fullName: name, transport: transport)
             let isCurrent = (id == defIn)
             let device = AudioInputDevice(
@@ -185,15 +215,65 @@ public final class MicrophoneManager: ObservableObject {
                 sampleRate: sampleRate,
                 isDefault: isCurrent
             )
-            list.append(device)
+            allList.append(device)
             if isCurrent {
                 active = device
             }
         }
 
-        self.availableDevices = list
+        // 10 October 2026: remember whichever physical mic (MacBook Pro, iPhone Continuity, or USB) the user selected.
+        if let active, active.transport.isPreferredPhysicalMic {
+            preferredInputUID = active.uid
+        }
+
+        let selectable = allList
+            .filter { $0.transport.isPreferredPhysicalMic }
+            .sorted { a, b in
+                let rankA = transportRank(a.transport)
+                let rankB = transportRank(b.transport)
+                if rankA != rankB { return rankA < rankB }
+                return a.name < b.name
+            }
+
+        self.allInputDevices = allList
+        self.availableDevices = selectable.isEmpty ? allList : selectable
         self.activeDevice = active
         self.onDeviceChanged?(active)
+    }
+
+    private func classifyTransport(code: UInt32, uid: String, name: String) -> MicTransport {
+        if code == kAudioDeviceTransportTypeBuiltIn || uid.contains("BuiltIn") || name.contains("MacBook") {
+            return .builtIn
+        }
+        // 'ccwl' (0x6363776c) or 'ccwd' (0x63637764) = Continuity Camera Microphone (iPhone)
+        let ccwl: UInt32 = 0x6363776c
+        let ccwd: UInt32 = 0x63637764
+        if code == ccwl || code == ccwd || uid.contains("Continuity") || name.contains("iPhone") {
+            return .continuity
+        }
+        if code == kAudioDeviceTransportTypeBluetooth || code == kAudioDeviceTransportTypeBluetoothLE
+            || uid.contains(":input") || name.contains("WH-1000") || name.contains("AirPods") {
+            return .bluetooth
+        }
+        if code == kAudioDeviceTransportTypeVirtual || code == kAudioDeviceTransportTypeAggregate
+            || uid.contains("Loopback") || name.contains("Teams") || uid.contains("aggregate") {
+            return .virtual
+        }
+        if code == kAudioDeviceTransportTypeUSB {
+            return .usb
+        }
+        return .usb
+    }
+
+    private func transportRank(_ transport: MicTransport) -> Int {
+        switch transport {
+        case .builtIn: return 0
+        case .continuity: return 1
+        case .usb: return 2
+        case .bluetooth: return 3
+        case .virtual: return 4
+        case .unknown: return 5
+        }
     }
 
     private func cleanShortName(fullName: String, transport: MicTransport) -> String {
@@ -208,6 +288,9 @@ public final class MicrophoneManager: ObservableObject {
     }
 
     public func switchToDevice(id: AudioDeviceID) {
+        if let chosen = allInputDevices.first(where: { $0.id == id }), chosen.transport.isPreferredPhysicalMic {
+            preferredInputUID = chosen.uid
+        }
         var defAddr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -227,8 +310,35 @@ public final class MicrophoneManager: ObservableObject {
         }
     }
 
+    public func switchToDevice(uid: String) -> Bool {
+        refreshDevices()
+        guard let target = allInputDevices.first(where: { $0.uid == uid || $0.uid.contains(uid) || $0.name.contains(uid) }) else {
+            return false
+        }
+        switchToDevice(id: target.id)
+        return activeDevice?.id == target.id
+    }
+
     public func builtInDeviceID() -> AudioDeviceID? {
-        return availableDevices.first(where: { $0.transport == .builtIn })?.id
+        return allInputDevices.first(where: { $0.transport == .builtIn })?.id
+    }
+
+    public func continuityDeviceID() -> AudioDeviceID? {
+        return allInputDevices.first(where: { $0.transport == .continuity })?.id
+    }
+
+    public func preferredDeviceID() -> AudioDeviceID? {
+        let targetUID = preferredInputUID
+        if let match = allInputDevices.first(where: { $0.uid == targetUID && $0.transport.isPreferredPhysicalMic }) {
+            return match.id
+        }
+        if let builtIn = builtInDeviceID() {
+            return builtIn
+        }
+        if let continuity = continuityDeviceID() {
+            return continuity
+        }
+        return availableDevices.first?.id
     }
 
     public func switchToBuiltIn() {
@@ -237,11 +347,20 @@ public final class MicrophoneManager: ObservableObject {
         }
     }
 
-    public func enforceBuiltInIfNeeded() {
+    // 10 October 2026: only intervene if a Bluetooth headset (AirPods, WH-1000XM3/XM5) or virtual loopback
+    // hijacked the input; never override the user's choice between MacBook Pro and iPhone Continuity.
+    public func ensurePreferredNonBluetoothInput() {
+        guard !isRestoringPreferred else { return }
         guard let current = activeDevice else { return }
-        if current.transport != .builtIn {
-            switchToBuiltIn()
+        if current.transport.isPreferredPhysicalMic {
+            preferredInputUID = current.uid
+            return
         }
+        guard let fallbackID = preferredDeviceID(), fallbackID != current.id else { return }
+        isRestoringPreferred = true
+        defer { isRestoringPreferred = false }
+        Log.write("MicrophoneManager: Bluetooth/virtual input '\(current.name)' detected; restoring preferred input ID \(fallbackID)")
+        switchToDevice(id: fallbackID)
     }
 
     public func makePillImage(isRecording: Bool = false) -> NSImage {
@@ -252,7 +371,6 @@ public final class MicrophoneManager: ObservableObject {
 
         let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
             let bgPath = NSBezierPath(roundedRect: rect, xRadius: height / 2, yRadius: height / 2)
-            // Always vibrant Apple system orange, never red
             let orangeColor = NSColor(srgbRed: 1.0, green: 0.50, blue: 0.0, alpha: 1.0)
             orangeColor.setFill()
             bgPath.fill()

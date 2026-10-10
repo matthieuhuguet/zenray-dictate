@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import WebKit
 
 // 3 October 2026, 15:52 CEST: a private app web session runs Gemini's own microphone flow.
@@ -44,6 +45,9 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     private var lastCaptureID: String?
     private var retryTask: Task<Void, Never>?
     private var retryCount = 0
+    // 10 October 2026: native input-only AUHAL microphone bridge bypassing WebKit VPIO/AUVPAggregate.
+    private let nativeMic = NativeMicrophoneBridge()
+    private var deviceSubscription: AnyCancellable?
     var onLiveState: ((String) -> Void)?
 
     // 5 October 2026: auto-reload after network recovery if launched before Wi-Fi connects at login.
@@ -74,6 +78,12 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         configuration.userContentController.add(self, name: "dictation")
         configuration.userContentController.add(self,name:"composerLayout")
         configuration.userContentController.add(self,name:"liveCapture")
+        configuration.userContentController.add(self,name:"nativeMic")
+        deviceSubscription = MicrophoneManager.shared.$activeDevice
+            .sink { [weak self] device in
+                guard let self, let device else { return }
+                self.nativeMic.switchDeviceIfRunning(to: device.id)
+            }
         do {
             guard let url = Bundle.main.url(forResource: "GeminiBridge", withExtension: "js") else {
                 throw TranscriptionError.geminiUnavailable("The Gemini bridge resource is missing. Rebuild ZenRayDictate.")
@@ -202,6 +212,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         let physicalPress = FnKeyMonitor.consumePressUptime()
         let presentationStarted = physicalPress.flatMap { receivedAt >= $0 && receivedAt - $0 < 1 ? $0 : nil } ?? receivedAt
         capturePresentationElapsed = 0; captureFrameElapsed = 0
+        MicrophoneManager.shared.ensurePreferredNonBluetoothInput()
         do { try BuiltinMicrophone.shared.pin() } catch { showLiveError(error);return }
         if webView.url == nil {
             Log.write("Gemini web session not yet loaded; starting load")
@@ -243,6 +254,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
                         self.onLiveState?("recording")
                         if self.stopRequested { self.stopLiveMicrophone() }
                     } else {
+                        self.nativeMic.stop()
                         self.liveRecording = false
                         let err = dict?["error"] as? String ?? "begin_returned_false"
                         Log.write("Gemini dictation not ready: \(err)")
@@ -253,6 +265,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
                         }
                     }
                 case let .failure(error):
+                    self.nativeMic.stop()
                     self.liveRecording = false
                     self.showLiveError(error)
                 }
@@ -273,6 +286,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         """
         webView.callAsyncJavaScript(script,arguments:[:],in:nil,in:.page) { [weak self] result in
             guard let self else { return }
+            self.nativeMic.stop()
             self.liveRecording=false;self.liveFinishing=false
             if case let .failure(error)=result { self.showLiveError(error) }
         }
@@ -283,12 +297,14 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
     func cancelLiveMicrophone() {
         stopRequested=false
-        webView.evaluateJavaScript("window.ZenRayComposer?.cancel()")
+        nativeMic.stop()
+        webView.evaluateJavaScript("window.ZenRayComposer?.cancel();window.ZenRayNativeMic?.stop()")
         liveRecording=false;liveStarting=false;liveFinishing=false;onLiveState?("idle")
         fadeComposer()
         if compact { sessionWindow.orderOut(nil) }
     }
     private func showLiveError(_ error:Error) {
+        nativeMic.stop()
         onLiveState?("error")
         let nsError = error as NSError
         let jsMessage = (nsError.userInfo["WKJavaScriptExceptionMessage"] as? String) ?? error.localizedDescription
@@ -297,6 +313,20 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         liveStarting = false
         liveFinishing = false
         fadeComposer()
+    }
+    private func startNativeMicBridge() {
+        MicrophoneManager.shared.refreshDevices()
+        MicrophoneManager.shared.ensurePreferredNonBluetoothInput()
+        guard let deviceID = MicrophoneManager.shared.activeDevice?.id ?? MicrophoneManager.shared.preferredDeviceID() else {
+            Log.write("NativeMicrophoneBridge: no active input device found")
+            return
+        }
+        _ = nativeMic.start(deviceID: deviceID) { [weak self] base64, sampleRate in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                _ = try? await self.webView.evaluateJavaScript("window.ZenRayNativeMic?.pushPCM16('\(base64)', \(sampleRate))")
+            }
+        }
     }
 
     #if DEBUG
@@ -311,7 +341,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
     func verificationLoseFocus() { sessionWindow.resignKey();NSApp.deactivate();windowDidResignKey(Notification(name:NSWindow.didResignKeyNotification,object:sessionWindow)) }
     func verificationState() async throws -> [String:Any] {
-        var result=(try await webView.evaluateJavaScript("({placeholderSuppressed:(()=>{const e=document.querySelector('.ql-editor');return !!e&&getComputedStyle(e,'::before').content==='none';})(),ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||''})")) as? [String:Any] ?? [:]
+        var result=(try await webView.evaluateJavaScript("({placeholderSuppressed:(()=>{const e=document.querySelector('.ql-editor');return !!e&&getComputedStyle(e,'::before').content==='none';})(),ready:!!window.ZenRayComposer&&!!window.ZenRayGemini?.ready(),nativeWaveform:!!document.querySelector('butterfly-wave-view canvas'),draft:document.querySelector('[role=\"textbox\"][contenteditable=\"true\"]')?.innerText||'',nativeMicActive:!!window.ZenRayNativeMic?.isActive?.(),nativeMicChunks:window.ZenRayNativeMic?.chunksReceived?.()||0})")) as? [String:Any] ?? [:]
         result["capturePresentationElapsed"]=capturePresentationElapsed;result["captureFrameElapsed"]=captureFrameElapsed;result["transitionElapsed"]=resultTransitionElapsed;result["appActive"]=NSApp.isActive;result["presented"]=composerPresented;result["alpha"]=Double(sessionWindow.alphaValue)
         result["recording"]=liveRecording;result["starting"]=liveStarting;result["finishing"]=liveFinishing
         result["width"]=Double(sessionWindow.frame.width)
@@ -410,13 +440,24 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "nativeMic" {
+            guard message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == Settings.url.host,
+                  let payload = message.body as? [String: Any], let action = payload["action"] as? String else { return }
+            if action == "start" {
+                startNativeMicBridge()
+            } else if action == "stop" {
+                nativeMic.stop()
+            }
+            return
+        }
         if message.name == "liveCapture" {
             guard message.frameInfo.isMainFrame,message.frameInfo.securityOrigin.host==Settings.url.host,continuation==nil,
                   let payload=message.body as? [String:Any],let state=payload["state"] as? String else { return }
             if state=="recording" { liveRecording=true;presentRecording();onLiveState?(state);return }
             if state=="finishing" { liveRecording=false;liveFinishing=true;onLiveState?(state);transitionToResult();return }
-            if state=="error" { liveRecording=false;liveStarting=false;liveFinishing=false;showLiveError(TranscriptionError.geminiUnavailable(payload["error"] as? String ?? "Gemini capture failed."));return }
+            if state=="error" { nativeMic.stop();liveRecording=false;liveStarting=false;liveFinishing=false;showLiveError(TranscriptionError.geminiUnavailable(payload["error"] as? String ?? "Gemini capture failed."));return }
             if state=="finished" {
+                nativeMic.stop()
                 liveRecording=false;liveFinishing=false
                 if let id=payload["id"] as? String,id != lastCaptureID {
                     lastCaptureID=id
@@ -479,6 +520,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
         }
     }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        nativeMic.stop()
         finish(.failure(TranscriptionError.geminiUnavailable("Gemini web session stopped; retry the saved recording.")))
         webView.reload()
     }
@@ -508,6 +550,7 @@ final class GeminiWebTranscriber: NSObject, WKNavigationDelegate, WKUIDelegate, 
             decisionHandler(.deny)
             return
         }
+        MicrophoneManager.shared.ensurePreferredNonBluetoothInput()
         do {
             try BuiltinMicrophone.shared.pin()
             decisionHandler(.grant)

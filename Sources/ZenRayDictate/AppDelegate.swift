@@ -197,15 +197,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             switchSubmenu.addItem(item)
         }
-        switchSubmenu.addItem(.separator())
-        let lockItem = NSMenuItem(
-            title: "Verrouiller sur le micro MacBook Pro",
-            action: #selector(toggleLockBuiltIn),
-            keyEquivalent: ""
-        )
-        lockItem.state = MicrophoneManager.shared.isLockedToBuiltIn ? .on : .off
-        lockItem.target = self
-        switchSubmenu.addItem(lockItem)
 
         let switchMenuItem = NSMenuItem(title: "Vue switch des micros...", action: #selector(showMicrophoneSwitcher), keyEquivalent: "")
         switchMenuItem.target = self
@@ -241,10 +232,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let deviceID = sender.representedObject as? AudioDeviceID {
             MicrophoneManager.shared.switchToDevice(id: deviceID)
         }
-    }
-
-    @objc private func toggleLockBuiltIn() {
-        MicrophoneManager.shared.isLockedToBuiltIn.toggle()
     }
 
     private func add(_ menu: NSMenu, _ title: String, _ action: Selector) {

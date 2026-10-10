@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-// 09 October 2026: visual microphone pill and switcher view for ZenRay Dictate.
+// 10 October 2026: visual microphone pill and 1-click switcher view for MacBook Pro and iPhone microphones.
 public struct MicrophoneSwitcherView: View {
     @ObservedObject var manager = MicrophoneManager.shared
     public var onClose: (() -> Void)?
@@ -11,7 +11,7 @@ public struct MicrophoneSwitcherView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             // Header: The Active Microphone Pill (Pastille UI)
             VStack(spacing: 10) {
                 HStack {
@@ -43,7 +43,6 @@ public struct MicrophoneSwitcherView: View {
 
                     Spacer(minLength: 4)
 
-                    // Transport tag
                     if let active = manager.activeDevice {
                         Text(active.transport.rawValue)
                             .font(.system(size: 10, weight: .bold))
@@ -60,7 +59,6 @@ public struct MicrophoneSwitcherView: View {
                 .clipShape(Capsule())
                 .shadow(color: Color.black.opacity(0.12), radius: 3, x: 0, y: 1)
 
-                // Sub-info: Sample rate and status
                 if let active = manager.activeDevice {
                     HStack(spacing: 12) {
                         Label {
@@ -71,12 +69,8 @@ public struct MicrophoneSwitcherView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                        if active.transport == .bluetooth {
-                            Label("Mode mains-libres casque", systemImage: "exclamationmark.triangle.fill")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.red)
-                        } else if active.transport == .builtIn {
-                            Label("Micro intégré haute fidélité", systemImage: "checkmark.seal.fill")
+                        if active.transport == .builtIn || active.transport == .continuity || active.transport == .usb {
+                            Label("Prêt pour la dictée", systemImage: "checkmark.seal.fill")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.green)
                         }
@@ -87,9 +81,9 @@ public struct MicrophoneSwitcherView: View {
             .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
             .clipShape(RoundedRectangle(cornerRadius: 14))
 
-            // Switcher list: Vue Switch des micros disponibles
+            // Switcher list: Vue Switch des micros disponibles (MacBook Pro / iPhone)
             VStack(alignment: .leading, spacing: 8) {
-                Text("Changer de micro")
+                Text("Choisir le micro")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
@@ -132,7 +126,7 @@ public struct MicrophoneSwitcherView: View {
                                     .foregroundStyle(.white)
                                     .clipShape(Capsule())
                                 } else {
-                                    Text("Switch")
+                                    Text("Choisir")
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(.secondary)
                                         .padding(.horizontal, 8)
@@ -162,35 +156,9 @@ public struct MicrophoneSwitcherView: View {
                 }
             }
 
-            // Security Lock Section (Toggle Switch)
-            VStack(alignment: .leading, spacing: 6) {
-                Toggle(isOn: $manager.isLockedToBuiltIn) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Verrouiller sur le micro MacBook Pro")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Empêche le casque Bluetooth de capturer le micro à la connexion.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.switch)
-            }
-            .padding(12)
-            .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-
-            // Footer actions
+            // Footer action
             HStack {
-                Button {
-                    manager.switchToBuiltIn()
-                } label: {
-                    Label("Forcer MacBook Pro", systemImage: "laptopcomputer")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .buttonStyle(.link)
-
                 Spacer()
-
                 Button {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") {
                         NSWorkspace.shared.open(url)

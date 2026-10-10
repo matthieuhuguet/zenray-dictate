@@ -2,6 +2,7 @@ import CoreAudio
 import Foundation
 
 // 3 October 2026, 21:55 CEST: pin only the default input, keeping AirPods output independent.
+// 10 October 2026: preserve user-selected MacBook Pro or iPhone Continuity microphone; only redirect if Bluetooth hijacked input.
 final class BuiltinMicrophone: @unchecked Sendable {
     static let shared = BuiltinMicrophone()
     // 6 October 2026, 12:42 CEST: respect the system input instead of locking the MacBook microphone.
@@ -43,9 +44,8 @@ final class BuiltinMicrophone: @unchecked Sendable {
     func currentInput() throws -> AudioDeviceID { try number(system,kAudioHardwarePropertyDefaultInputDevice) }
     func currentOutput() throws -> AudioDeviceID { try number(system,kAudioHardwarePropertyDefaultOutputDevice) }
     func pin() throws {
-        // 09 October 2026: respect the user lock setting from MicrophoneManager and Switcher view
-        let isLocked = UserDefaults.standard.bool(forKey: "ZenRayDictate.LockToBuiltIn")
-        guard isLocked else { return }
+        // 10 October 2026: preserve MacBook Pro or iPhone Continuity input; only switch away if Bluetooth headset hijacked input.
+        guard Self.lockingEnabled else { return }
         let device = try builtInDevice()
         if try currentInput() != device {
             var property = address(kAudioHardwarePropertyDefaultInputDevice), selected = device

@@ -1,4 +1,6 @@
 // 3 October 2026, 15:52 CEST: replay saved WAV through Gemini's microphone without submitting a chat.
+// 10 October 2026: stream live 16 kHz PCM16 audio from NativeMicrophoneBridge (input-only AUHAL) into
+// WebAudio MediaStreamDestination so WebKit never instantiates VPIO / AUVPAggregate on AirPods Pro output.
 (() => {
   if (location.hostname !== 'gemini.google.com') return;
   const settings = {
@@ -10,6 +12,47 @@
     captureTimeoutMs: 12000,
   };
   let active = null;
+  let liveStreamState = null;
+  const stopLiveNativeStream = () => {
+    if (!liveStreamState) return;
+    const current = liveStreamState;
+    liveStreamState = null;
+    current.active = false;
+    try { window.webkit?.messageHandlers?.nativeMic?.postMessage({ action: 'stop' }); } catch {}
+    if (current.context) current.context.close().catch(() => {});
+  };
+  window.ZenRayNativeMic = {
+    isActive: () => Boolean(liveStreamState && liveStreamState.active),
+    chunksReceived: () => liveStreamState?.chunksReceived || 0,
+    stop: stopLiveNativeStream,
+    pushPCM16: (base64, sampleRate = 16000) => {
+      if (!liveStreamState || !liveStreamState.active) return;
+      const { context, destination } = liveStreamState;
+      if (context.state === 'suspended') context.resume().catch(() => {});
+      const binary = atob(base64);
+      const len = binary.length >> 1;
+      if (len <= 0) return;
+      const audioBuffer = context.createBuffer(1, len, sampleRate);
+      const channel = audioBuffer.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const lo = binary.charCodeAt(i * 2);
+        const hi = binary.charCodeAt(i * 2 + 1);
+        let val = (hi << 8) | lo;
+        if (val >= 0x8000) val -= 0x10000;
+        channel[i] = val / 32768.0;
+      }
+      const source = context.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(destination);
+      const now = context.currentTime;
+      if (liveStreamState.nextStartTime < now) {
+        liveStreamState.nextStartTime = now + 0.015;
+      }
+      source.start(liveStreamState.nextStartTime);
+      liveStreamState.nextStartTime += audioBuffer.duration;
+      liveStreamState.chunksReceived = (liveStreamState.chunksReceived || 0) + 1;
+    },
+  };
   const editor = () => document.querySelector(settings.editorSelector);
   const button = pattern => [...document.querySelectorAll('button[aria-label]')]
     .find(el => !el.disabled && el.getClientRects().length && pattern.test(el.getAttribute('aria-label')));
@@ -26,8 +69,31 @@
   if (originalCapture) navigator.mediaDevices.getUserMedia = async constraints => {
     const request = active;
     if (!request) {
-      // 6 October 2026, 12:42 CEST: use the system microphone without retaining a cached device ID.
       if (!constraints?.audio || constraints.video) return originalCapture(constraints);
+      // 10 October 2026: route live microphone capture through NativeMicrophoneBridge (input-only AUHAL)
+      // when running in the native WKWebView session, bypassing WebKit's VPIO / AUVPAggregate state fault.
+      if (window.webkit?.messageHandlers?.nativeMic && !window.ZenRayVerificationAudio) {
+        stopLiveNativeStream();
+        const context = new AudioContext();
+        const destination = context.createMediaStreamDestination();
+        const keepalive = context.createGain();
+        keepalive.gain.value = 0;
+        keepalive.connect(destination);
+        liveStreamState = { context, destination, nextStartTime: 0, active: true, chunksReceived: 0 };
+        const stream = destination.stream;
+        stream.getTracks().forEach(track => {
+          const origStop = track.stop.bind(track);
+          track.stop = () => {
+            stopLiveNativeStream();
+            return origStop();
+          };
+          track.applyConstraints = async () => {};
+        });
+        await context.resume();
+        window.webkit.messageHandlers.nativeMic.postMessage({ action: 'start' });
+        return stream;
+      }
+      // 6 October 2026, 12:42 CEST: use the system microphone without retaining a cached device ID.
       const {deviceId,groupId,...audio} = typeof constraints.audio === 'object' ? constraints.audio : {};
       return originalCapture({...constraints,audio});
     }
@@ -50,6 +116,7 @@
     isBusy: () => Boolean(active),
     ready: () => Boolean(editor() && button(settings.microphoneLabels) && originalCapture),
     cancel: async () => {
+      stopLiveNativeStream();
       if (!active) return;
       const request = active;
       if (request.startedAt && !request.stopped) button(settings.stopLabels)?.click();
