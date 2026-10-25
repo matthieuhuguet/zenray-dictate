@@ -6,8 +6,8 @@ cd "$(dirname "$0")"
 
 APP="ZenRayDictate.app"
 BUNDLE_ID="com.zenray.dictate"
-APP_VERSION="3.7"
-APP_BUILD="11"
+APP_VERSION="3.9"
+APP_BUILD="13"
 
 echo "==> Compiling"
 swift build -c release --arch arm64

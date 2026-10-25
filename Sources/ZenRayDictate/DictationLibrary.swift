@@ -1,7 +1,8 @@
 import Foundation
 
 // 3 October 2026, 15:58 CEST: settings, vocabulary, modes and history share one durable library.
-enum DictationEngine: String, Codable, CaseIterable { case gemini, whisper, parakeet }
+// 25 October 2026, 19:05 CEST: claude streams to the claude.ai voice_stream (harmonic-asr-8) and is the new default.
+enum DictationEngine: String, Codable, CaseIterable { case claude, gemini, whisper, parakeet }
 struct TextRule: Codable, Identifiable, Equatable {
     var id = UUID()
     var spoken: String
@@ -16,7 +17,7 @@ struct DictationMode: Codable, Identifiable, Equatable {
     var useScreenContext = false
 }
 struct DictationPreferences: Codable {
-    var engine: DictationEngine = .gemini
+    var engine: DictationEngine = .claude
     var localOnly = false
     var allowLocalFallback = false
     var keepAudio = false
@@ -35,9 +36,15 @@ struct DictationPreferences: Codable {
     var whisperModel = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/huggingface/hub/models--mlx-community--whisper-large-v3-turbo/snapshots/a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb").path
     var parakeetExecutable = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".venvs/asr-ja/bin/parakeet-mlx").path
     var parakeetModel = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cache/huggingface/hub/models--mlx-community--parakeet-tdt_ctc-0.6b-ja/snapshots/e3810190ff521dcd208bc444a71bf877f3864566").path
+    // 25 October 2026, 19:05 CEST: Claude engine knobs. Empty provider = server default (harmonic-asr-8); "nova3" = Deepgram.
+    var claudeVoiceBaseURL = "wss://api.anthropic.com"
+    var claudeSttProvider = ""
+    var claudeKeyterms = "Houdini, Unreal Engine, Copernicus, ZenRay, Claude Code"
+    var claudeKeytermLimit = 50
+    var claudeExecutable = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/claude").path
     // 3 October 2026, 19:45 CEST: older libraries retain settings when new preferences are added.
     init() {}
-    enum CodingKeys: String, CodingKey { case engine, localOnly, allowLocalFallback, keepAudio, keepHistory, learnVocabulary, whisperMode, fnPushToTalk, shortcutKeyCode, shortcutModifiers, activeMode, language, clipboardRestoreDelay, doublePressInterval, model, whisperExecutable, whisperModel, parakeetExecutable, parakeetModel }
+    enum CodingKeys: String, CodingKey { case engine, localOnly, allowLocalFallback, keepAudio, keepHistory, learnVocabulary, whisperMode, fnPushToTalk, shortcutKeyCode, shortcutModifiers, activeMode, language, clipboardRestoreDelay, doublePressInterval, model, whisperExecutable, whisperModel, parakeetExecutable, parakeetModel, claudeVoiceBaseURL, claudeSttProvider, claudeKeyterms, claudeKeytermLimit, claudeExecutable }
     init(from decoder: Decoder) throws {
         self.init()
         let values = try decoder.container(keyedBy:CodingKeys.self)
@@ -60,6 +67,11 @@ struct DictationPreferences: Codable {
         whisperModel = try values.decodeIfPresent(String.self,forKey:.whisperModel) ?? whisperModel
         parakeetExecutable = try values.decodeIfPresent(String.self,forKey:.parakeetExecutable) ?? parakeetExecutable
         parakeetModel = try values.decodeIfPresent(String.self,forKey:.parakeetModel) ?? parakeetModel
+        claudeVoiceBaseURL = try values.decodeIfPresent(String.self,forKey:.claudeVoiceBaseURL) ?? claudeVoiceBaseURL
+        claudeSttProvider = try values.decodeIfPresent(String.self,forKey:.claudeSttProvider) ?? claudeSttProvider
+        claudeKeyterms = try values.decodeIfPresent(String.self,forKey:.claudeKeyterms) ?? claudeKeyterms
+        claudeKeytermLimit = try values.decodeIfPresent(Int.self,forKey:.claudeKeytermLimit) ?? claudeKeytermLimit
+        claudeExecutable = try values.decodeIfPresent(String.self,forKey:.claudeExecutable) ?? claudeExecutable
     }
 }
 

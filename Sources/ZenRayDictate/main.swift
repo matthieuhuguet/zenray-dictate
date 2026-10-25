@@ -1,6 +1,19 @@
 import AppKit
 import CoreText
 
+// 25 October 2026, 19:20 CEST: verification entry point, `ZenRayDictate --transcribe <audio file>` runs the
+// configured Claude engine headless and prints the text, so the engine is testable without the interface.
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--transcribe" {
+    let url = URL(fileURLWithPath: CommandLine.arguments[2])
+    let done = DispatchSemaphore(value: 0); var code: Int32 = 0
+    Task.detached {
+        do { let result = try await ClaudeVoiceTranscriber().transcribe(audioURL: url); print("\(result.provider)\t\(result.text)") }
+        catch { FileHandle.standardError.write(Data("ERROR \(error.localizedDescription)\n".utf8)); code = 1 }
+        done.signal()
+    }
+    done.wait(); exit(code)
+}
+
 // 5 October 2026: Single-instance guard prevents duplicate WebKit data store conflicts.
 let bundleID = Bundle.main.bundleIdentifier ?? "com.zenray.dictate"
 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)

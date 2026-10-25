@@ -52,6 +52,15 @@ final class TranscriptionPipeline {
     func transcribe(audioURL: URL) async throws -> TranscriptionResult {
         let preferences = DictationLibrary.shared.document.preferences
         if preferences.engine == .parakeet { return try await LocalParakeetTranscriber().transcribe(audioURL: audioURL) }
+        // 25 October 2026, 19:05 CEST: Claude voice_stream engine, with optional local fallback.
+        if preferences.engine == .claude && !preferences.localOnly {
+            do { return try await ClaudeVoiceTranscriber().transcribe(audioURL: audioURL) }
+            catch {
+                if !preferences.allowLocalFallback { throw error }
+                Log.write("Claude dictation unavailable: \(error.localizedDescription); trying local engine")
+                return try await local.transcribe(audioURL: audioURL)
+            }
+        }
         if preferences.localOnly || preferences.engine == .whisper { return try await local.transcribe(audioURL: audioURL) }
         do {
             return try await Self.gemini.transcribe(audioURL: audioURL)

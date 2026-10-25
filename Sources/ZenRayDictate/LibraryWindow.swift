@@ -131,8 +131,13 @@ private struct LibraryView: View {
             TabView {
                 ScrollView { Form {
                     Picker("Engine",selection:$model.preferences.engine) { ForEach(DictationEngine.allCases,id:\.self) { Text($0.rawValue).tag($0) } }
-                    Toggle("100% local (no Gemini requests)",isOn:$model.preferences.localOnly)
-                    Toggle("Whisper fallback if Gemini fails",isOn:$model.preferences.allowLocalFallback)
+                    Toggle("100% local (no Claude or Gemini requests)",isOn:$model.preferences.localOnly)
+                    Toggle("Whisper fallback if Claude or Gemini fails",isOn:$model.preferences.allowLocalFallback)
+                    // 25 October 2026, 19:05 CEST: Claude engine parameters, editable without a rebuild.
+                    TextField("Claude provider (empty = harmonic-asr-8, nova3 = Deepgram)",text:$model.preferences.claudeSttProvider)
+                    TextField("Claude keyterms, comma separated (vocabulary words are added)",text:$model.preferences.claudeKeyterms)
+                    TextField("Claude voice server",text:$model.preferences.claudeVoiceBaseURL)
+                    TextField("Claude CLI used to refresh the sign-in",text:$model.preferences.claudeExecutable)
                     Toggle("Hold Fn to dictate",isOn:$model.preferences.fnPushToTalk)
                     Toggle("Whispering: boost quiet audio",isOn:$model.preferences.whisperMode)
                     Toggle("Keep text history",isOn:$model.preferences.keepHistory)

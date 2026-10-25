@@ -18,7 +18,16 @@ final class LibraryTests: XCTestCase {
     func testOldPreferencesDecodeWithDefaults() throws {
         let preferences = try JSONDecoder().decode(DictationPreferences.self,from:Data("{\"keepAudio\":true,\"activeMode\":\"code\"}".utf8))
         XCTAssertTrue(preferences.keepAudio); XCTAssertEqual(preferences.activeMode,"code")
-        XCTAssertEqual(preferences.engine,.gemini); XCTAssertFalse(preferences.localOnly)
+        // 25 October 2026: Claude voice_stream (harmonic-asr-8) is the default engine; a saved engine is kept.
+        XCTAssertEqual(preferences.engine,.claude); XCTAssertFalse(preferences.localOnly)
+        XCTAssertEqual(preferences.claudeVoiceBaseURL,"wss://api.anthropic.com"); XCTAssertEqual(preferences.claudeSttProvider,"")
+        let saved = try JSONDecoder().decode(DictationPreferences.self,from:Data("{\"engine\":\"gemini\",\"claudeSttProvider\":\"nova3\"}".utf8))
+        XCTAssertEqual(saved.engine,.gemini); XCTAssertEqual(saved.claudeSttProvider,"nova3")
+    }
+    func testClaudeKeytermsDeduplicateAndRespectLimit() {
+        var preferences = DictationPreferences()
+        preferences.claudeKeyterms = "Houdini, houdini, , Unreal, bad,term"; preferences.claudeKeytermLimit = 2
+        XCTAssertEqual(Array(ClaudeVoiceTranscriber.keyterms(preferences:preferences).prefix(2)),["Houdini","Unreal"])
     }
     func testQuotedCSVAndRejectedBrokenQuote() throws {
         XCTAssertEqual(try CSVRows.parse("spoken,written\r\n\"zen, ray\",\"Zen\"\"Ray\"\n"),[["spoken","written"],["zen, ray","Zen\"Ray"]])
