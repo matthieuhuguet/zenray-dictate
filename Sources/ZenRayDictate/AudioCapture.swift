@@ -25,6 +25,8 @@ final class AudioCapture: NSObject {
     var gain: Float = 1
     var onLevel: ((Float) -> Void)?
     var onDuration: ((TimeInterval) -> Void)?
+    // 25 October 2026: 16 kHz mono little-endian Int16 chunks, delivered on the audio thread for live streaming.
+    var onPCM16: ((Data) -> Void)?
 
     private let fileManager = FileManager.default
     private let captureDirectory: URL
@@ -90,6 +92,14 @@ final class AudioCapture: NSObject {
                     for index in 0..<Int(converted.frameLength) { samples[index] = min(1,max(-1,samples[index]*self.gain)) }
                 }
                 try file.write(from: converted)
+                if let onPCM16 = self.onPCM16, let samples = converted.floatChannelData?[0], converted.frameLength > 0 {
+                    var pcm = Data(count: Int(converted.frameLength) * 2)
+                    pcm.withUnsafeMutableBytes { raw in
+                        let out = raw.bindMemory(to: Int16.self)
+                        for i in 0..<Int(converted.frameLength) { out[i] = Int16(max(-1, min(1, samples[i])) * 32767).littleEndian }
+                    }
+                    onPCM16(pcm)
+                }
             } catch {
                 Log.write("audio capture write failed: \(error.localizedDescription)")
             }

@@ -1,3 +1,11 @@
+## 25 October 2026: live Claude stream and capsule-shaped shadow
+
+Version 3.11 streams audio while Matthieu speaks, as claude.ai does. The WebSocket opens when Fn is pressed (`ClaudeLiveSession` in `ClaudeVoiceTranscriber.swift`), each 16 kHz PCM16 chunk from `AudioCapture.onPCM16` is sent at once, and `forward_interims=typed` returns `TranscriptInterim` frames during speech. At the second Fn press only `CloseStream` remains: the card opens immediately with the text already received, then its text is replaced in place by the final transcript. The OAuth token is read once and kept in memory. If the live session fails, the recorded file is transcribed as before. (25 October 2026)
+
+Measured with `ZenRayDictate --live-latency <audio file>`, which streams a file at real-time pace: live text ready 0 ms after the stop for the French, Japanese and English clips; final text after 438, 362 and 297 ms, then 471 ms on a second French run. The final delay is the server's end of processing. With `language` set to `auto`, Japanese interims arrive in romaji and become kana with the final text; with `language` set to `ja` they arrive in kana. (25 October 2026)
+
+The square around the capsule was the window shadow, computed as a rectangle. `NSVisualEffectView` ignores the layer corner radius, so `maskImage` now cuts the real capsule and card shapes, and the shadow is recomputed after each display. `Scripts/ShadowCheck.py <window capture>` reads the darkest pixel around each corner of the body: 224 on version 3.10 (square), 241 on version 3.11 (capsule); it exits 1 under 235. (25 October 2026)
+
 ## 25 October 2026: B1 « Papier crème » overlay and I1 Claude icon
 
 Version 3.10 replaces the old bottom capsule of the native flow with the design Matthieu chose, B1 « Papier crème » in Liquid Glass (`Sources/ZenRayDictate/ClaudeOverlay.swift`). Pressing Fn shows a 300 × 60 pt cream glass capsule 16 pt from the right edge, vertically centred on the visible screen: a terracotta button with the SF Symbol `mic.fill`, a live terracotta waveform and a timer in Anthropic Serif. Pressing Fn again stops the recording; the capsule dims while Claude transcribes. (25 October 2026)

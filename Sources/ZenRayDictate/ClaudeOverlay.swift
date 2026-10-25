@@ -69,7 +69,7 @@ final class ClaudeOverlay {
             let r = screen.visibleFrame
             capsule.setFrameOrigin(NSPoint(x: r.maxX - Tokens.edgeInset - Tokens.capsuleSize.width, y: r.midY - Tokens.capsuleSize.height / 2))
         }
-        fadeIn(capsule)
+        fadeIn(capsule); capsule.invalidateShadow()
         Log.write("overlay: recording capsule at right middle")
     }
 
@@ -114,6 +114,8 @@ final class ClaudeOverlay {
         glass.material = .popover; glass.blendingMode = .behindWindow; glass.state = .active
         glass.appearance = NSAppearance(named: .aqua)
         glass.wantsLayer = true; glass.layer?.cornerRadius = radius; glass.layer?.masksToBounds = true
+        // 25 October 2026: NSVisualEffectView ignores the layer radius for its blur; maskImage cuts the real capsule shape. / sans masque, un carré apparaît.
+        glass.maskImage = roundedMask(radius: radius)
         glass.autoresizingMask = [.width, .height]
         // Cream tint and bright rim of the Liquid Glass template. / teinte crème et liseré du gabarit Liquid Glass.
         let tint = CAGradientLayer()
@@ -162,7 +164,7 @@ final class ClaudeOverlay {
         for view in [titleLabel, textLabel, actions] as [NSView] { glass.addSubview(view) }
     }
 
-    private func present(title: String, text: String, showCopy: Bool, showInsert: Bool) {
+    private func present(title: String, text: String, showCopy: Bool, showInsert: Bool, animate: Bool = true) {
         tick?.invalidate(); tick = nil; stopPulse(); fadeOut(capsule)
         titleLabel.stringValue = title; textLabel.stringValue = text
         copyButton.setTitle(showCopy ? "Copié" : "Copier")
@@ -178,8 +180,8 @@ final class ClaudeOverlay {
             let r = screen.visibleFrame
             card.setFrame(NSRect(x: r.midX - Tokens.cardWidth / 2, y: r.minY + Tokens.bottomInset, width: Tokens.cardWidth, height: height), display: true)
         }
-        fadeIn(card)
-        watchOutsideClicks()
+        if animate { fadeIn(card); watchOutsideClicks() }
+        card.invalidateShadow()
     }
 
     // MARK: Motion
@@ -221,6 +223,22 @@ final class ClaudeOverlay {
         }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: handler) { outsideMonitors.append(m) }
         if let m = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { handler($0); return $0 }) { outsideMonitors.append(m) }
+    }
+
+    private static func roundedMask(radius: CGFloat) -> NSImage {
+        let side = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill(); NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill(); return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
+    }
+
+    /// Replaces the text of a visible card without fading, when the final transcript differs from the live one.
+    func updateResult(_ text: String) {
+        guard card.isVisible, textLabel.stringValue != text else { return }
+        present(title: titleLabel.stringValue, text: text, showCopy: true, showInsert: !actions.views[1].isHidden, animate: false)
     }
 
     static func symbol(_ name: String, size: CGFloat, color: NSColor) -> NSImage? {

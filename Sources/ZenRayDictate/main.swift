@@ -40,6 +40,30 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--overlay-prev
     previewApp.run()
 }
 
+// 25 October 2026, 21:50 CEST: `ZenRayDictate --live-latency <audio file>` streams the file through the live session at
+// real-time pace, as a voice would be, then prints how long after the stop the live text and the final text were ready.
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--live-latency" {
+    let url = URL(fileURLWithPath: CommandLine.arguments[2])
+    let done = DispatchSemaphore(value: 0); var code: Int32 = 0
+    Task.detached {
+        do {
+            let pcm = try ClaudeVoiceTranscriber.pcm16(from: url)
+            _ = try ClaudeVoiceTranscriber.token()
+            let session = try ClaudeLiveSession(preferences: DictationLibrary.shared.document.preferences)
+            var offset = 0
+            while offset < pcm.count { let end = min(offset + 1_280, pcm.count); session.feed(pcm.subdata(in: offset..<end)); offset = end; try await Task.sleep(nanoseconds: 40_000_000) }
+            let stop = Date()
+            let early = await session.liveText()
+            let earlyMs = Int(Date().timeIntervalSince(stop) * 1000)
+            let result = try await session.finish()
+            print("live text after \(earlyMs) ms: \(early)")
+            print("final text after \(Int(Date().timeIntervalSince(stop) * 1000)) ms: \(result.text)")
+        } catch { FileHandle.standardError.write(Data("ERROR \(error.localizedDescription)\n".utf8)); code = 1 }
+        done.signal()
+    }
+    done.wait(); exit(code)
+}
+
 // 5 October 2026: Single-instance guard prevents duplicate WebKit data store conflicts.
 let bundleID = Bundle.main.bundleIdentifier ?? "com.zenray.dictate"
 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
