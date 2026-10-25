@@ -1,3 +1,7 @@
+## 25 October 2026: text-only result card
+
+Version 3.12 removes the « Transcription » title and the action row at Matthieu's request: the card at the bottom centre shows the text alone, already copied, and its width follows the text from 240 to 640 pt. `ClaudeOverlay.Tokens.showTitle` and `showActions` bring them back. Measured on the preview sentence: card 575 × 49 pt, centred (x 576), 24 pt above the Dock. `Scripts/ShadowCheck.py` is calibrated for the capsule; on this shorter card the downward shadow darkens the lower corners to 232 without any square. (25 October 2026)
+
 ## 25 October 2026: live Claude stream and capsule-shaped shadow
 
 Version 3.11 streams audio while Matthieu speaks, as claude.ai does. The WebSocket opens when Fn is pressed (`ClaudeLiveSession` in `ClaudeVoiceTranscriber.swift`), each 16 kHz PCM16 chunk from `AudioCapture.onPCM16` is sent at once, and `forward_interims=typed` returns `TranscriptInterim` frames during speech. At the second Fn press only `CloseStream` remains: the card opens immediately with the text already received, then its text is replaced in place by the final transcript. The OAuth token is read once and kept in memory. If the live session fails, the recorded file is transcribed as before. (25 October 2026)

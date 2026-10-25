@@ -21,6 +21,10 @@ final class ClaudeOverlay {
         static let cardRadius: CGFloat = 20
         static let titleSize: CGFloat = 14, textSize: CGFloat = 17, actionSize: CGFloat = 12
         static let maxTextHeight: CGFloat = 220
+        // 25 October 2026, 22:10 CEST: Matthieu simplified the card to the text alone. / la carte ne montre que le texte.
+        static let showTitle = false, showActions = false
+        static let textOnlyPadding = NSEdgeInsets(top: 14, left: 20, bottom: 14, right: 20)
+        static let fitWidth = true, minCardWidth: CGFloat = 240   // the card hugs short texts, up to cardWidth
         static let fade: TimeInterval = 0.18
         static let tintTop = 0.62, tintBottom = 0.42, rim = 0.60
         static let cream = NSColor(srgbRed: 1.0, green: 248/255, blue: 238/255, alpha: 1)
@@ -169,16 +173,27 @@ final class ClaudeOverlay {
         titleLabel.stringValue = title; textLabel.stringValue = text
         copyButton.setTitle(showCopy ? "Copié" : "Copier")
         actions.views[0].isHidden = !showCopy; actions.views[1].isHidden = !showInsert
-        let p = Tokens.cardPadding, inner = Tokens.cardWidth - p.left - p.right
+        titleLabel.isHidden = !Tokens.showTitle; actions.isHidden = !Tokens.showActions
+        let full = Tokens.showTitle || Tokens.showActions
+        let p = full ? Tokens.cardPadding : Tokens.textOnlyPadding
+        let maxInner = Tokens.cardWidth - p.left - p.right
+        var inner = maxInner
+        if Tokens.fitWidth && !full {
+            let natural = ceil(textLabel.attributedStringValue.boundingRect(with: NSSize(width: CGFloat.greatestFiniteMagnitude, height: 100), options: [.usesLineFragmentOrigin]).width) + 4
+            inner = min(maxInner, max(Tokens.minCardWidth - p.left - p.right, natural))
+        }
+        textLabel.preferredMaxLayoutWidth = inner
         let textHeight = min(Tokens.maxTextHeight, ceil(textLabel.sizeThatFits(NSSize(width: inner, height: .greatestFiniteMagnitude)).height))
-        let titleHeight: CGFloat = 20, actionsHeight: CGFloat = 18, gap: CGFloat = 4, gap2: CGFloat = 10
+        let titleHeight: CGFloat = Tokens.showTitle ? 20 : 0, actionsHeight: CGFloat = Tokens.showActions ? 18 : 0
+        let gap: CGFloat = Tokens.showTitle ? 4 : 0, gap2: CGFloat = Tokens.showActions ? 10 : 0
         let height = p.top + titleHeight + gap + textHeight + gap2 + actionsHeight + p.bottom
+        let width = inner + p.left + p.right
         actions.frame = NSRect(x: p.left, y: p.bottom, width: inner, height: actionsHeight)
         textLabel.frame = NSRect(x: p.left, y: p.bottom + actionsHeight + gap2, width: inner, height: textHeight)
         titleLabel.frame = NSRect(x: p.left, y: height - p.top - titleHeight, width: inner, height: titleHeight)
         if let screen = Self.screen() {
             let r = screen.visibleFrame
-            card.setFrame(NSRect(x: r.midX - Tokens.cardWidth / 2, y: r.minY + Tokens.bottomInset, width: Tokens.cardWidth, height: height), display: true)
+            card.setFrame(NSRect(x: r.midX - width / 2, y: r.minY + Tokens.bottomInset, width: width, height: height), display: true)
         }
         if animate { fadeIn(card); watchOutsideClicks() }
         card.invalidateShadow()
