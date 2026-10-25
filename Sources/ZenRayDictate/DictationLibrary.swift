@@ -41,10 +41,12 @@ struct DictationPreferences: Codable {
     var claudeSttProvider = ""
     var claudeKeyterms = "Houdini, Unreal Engine, Copernicus, ZenRay, Claude Code"
     var claudeKeytermLimit = 50
+    // 25 October 2026: false = copy and show the text bottom centre; true = also paste it into the focused field.
+    var autoInsert = false
     var claudeExecutable = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/claude").path
     // 3 October 2026, 19:45 CEST: older libraries retain settings when new preferences are added.
     init() {}
-    enum CodingKeys: String, CodingKey { case engine, localOnly, allowLocalFallback, keepAudio, keepHistory, learnVocabulary, whisperMode, fnPushToTalk, shortcutKeyCode, shortcutModifiers, activeMode, language, clipboardRestoreDelay, doublePressInterval, model, whisperExecutable, whisperModel, parakeetExecutable, parakeetModel, claudeVoiceBaseURL, claudeSttProvider, claudeKeyterms, claudeKeytermLimit, claudeExecutable }
+    enum CodingKeys: String, CodingKey { case engine, localOnly, allowLocalFallback, keepAudio, keepHistory, learnVocabulary, whisperMode, fnPushToTalk, shortcutKeyCode, shortcutModifiers, activeMode, language, clipboardRestoreDelay, doublePressInterval, model, whisperExecutable, whisperModel, parakeetExecutable, parakeetModel, claudeVoiceBaseURL, claudeSttProvider, claudeKeyterms, claudeKeytermLimit, claudeExecutable, autoInsert }
     init(from decoder: Decoder) throws {
         self.init()
         let values = try decoder.container(keyedBy:CodingKeys.self)
@@ -72,6 +74,7 @@ struct DictationPreferences: Codable {
         claudeKeyterms = try values.decodeIfPresent(String.self,forKey:.claudeKeyterms) ?? claudeKeyterms
         claudeKeytermLimit = try values.decodeIfPresent(Int.self,forKey:.claudeKeytermLimit) ?? claudeKeytermLimit
         claudeExecutable = try values.decodeIfPresent(String.self,forKey:.claudeExecutable) ?? claudeExecutable
+        autoInsert = try values.decodeIfPresent(Bool.self,forKey:.autoInsert) ?? autoInsert
     }
 }
 

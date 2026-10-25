@@ -6,8 +6,8 @@ cd "$(dirname "$0")"
 
 APP="ZenRayDictate.app"
 BUNDLE_ID="com.zenray.dictate"
-APP_VERSION="3.9"
-APP_BUILD="13"
+APP_VERSION="3.10"
+APP_BUILD="14"
 
 echo "==> Compiling"
 swift build -c release --arch arm64
@@ -23,7 +23,8 @@ cp "$BIN" "$APP/Contents/MacOS/ZenRayDictate"
 cp Sources/ZenRayDictate/Resources/GeminiBridge.js Sources/ZenRayDictate/Resources/GeminiComposer.js "$APP/Contents/Resources/"
 # 3 October 2026, 19:55 CEST: ship the font drawings used by the native interface.
 mkdir -p "$APP/Contents/Resources/Fonts"
-for FONT_FILE in InterVariable.ttf AnthropicSerif-Regular.ttf AnthropicMono-Regular.ttf; do
+# 25 October 2026: GT Sectra LCG italic titles the B1 result card.
+for FONT_FILE in InterVariable.ttf AnthropicSerif-Regular.ttf AnthropicMono-Regular.ttf GT-Sectra-LCGV-Regular-Italic.otf; do
     cp "$HOME/Library/Fonts/$FONT_FILE" "$APP/Contents/Resources/Fonts/"
 done
 if [[ -f AppIcon.icns ]]; then

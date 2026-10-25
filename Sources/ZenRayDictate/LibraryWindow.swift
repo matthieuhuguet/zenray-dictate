@@ -139,6 +139,7 @@ private struct LibraryView: View {
                     TextField("Claude voice server",text:$model.preferences.claudeVoiceBaseURL)
                     TextField("Claude CLI used to refresh the sign-in",text:$model.preferences.claudeExecutable)
                     Toggle("Hold Fn to dictate",isOn:$model.preferences.fnPushToTalk)
+                    Toggle("Also paste the text into the focused field (otherwise copy and show it)",isOn:$model.preferences.autoInsert)
                     Toggle("Whispering: boost quiet audio",isOn:$model.preferences.whisperMode)
                     Toggle("Keep text history",isOn:$model.preferences.keepHistory)
                     Toggle("Keep audio for re-transcription (off by default)",isOn:$model.preferences.keepAudio)

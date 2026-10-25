@@ -1,3 +1,15 @@
+## 25 October 2026: B1 « Papier crème » overlay and I1 Claude icon
+
+Version 3.10 replaces the old bottom capsule of the native flow with the design Matthieu chose, B1 « Papier crème » in Liquid Glass (`Sources/ZenRayDictate/ClaudeOverlay.swift`). Pressing Fn shows a 300 × 60 pt cream glass capsule 16 pt from the right edge, vertically centred on the visible screen: a terracotta button with the SF Symbol `mic.fill`, a live terracotta waveform and a timer in Anthropic Serif. Pressing Fn again stops the recording; the capsule dims while Claude transcribes. (25 October 2026)
+
+The text then appears in a 640 pt card at the bottom centre, 24 pt above the Dock: a title in GT Sectra LCG italic, the text in Anthropic Serif 17 pt, and three SF Symbol actions, `doc.on.doc` Copié, `return` Insérer and `arrow.clockwise` Refaire. The text is always copied to the clipboard. « Insérer » pastes it into the field that had focus when Fn was pressed; the panels never take keyboard focus. A click outside the card fades it in 0.18 s. Setting `autoInsert` (Settings, « Also paste the text into the focused field ») restores automatic pasting; it is off by default. (25 October 2026)
+
+Every value of the design lives in `ClaudeOverlay.Tokens`. Design file: `/Users/zenray/.claude/skills/zenray-edit/designs/2026-10-25-zenray-dictate-papier-verre/index.html`. (25 October 2026)
+
+The app icon is I1: a terracotta squircle with a glass highlight and the white SF Symbol `mic.fill`, rendered by `Scripts/RenderClaudeIcon.swift`; the former Gemini star is archived in `docs/icons-proposals/archive-gemini-25-October-2026/`. (25 October 2026)
+
+Verification: `ZenRayDictate --overlay-preview` shows the capsule for 4 s, then the card for 6 s, with synthetic levels. Measured window bounds on a 1728 × 1117 pt screen whose visible frame starts 75 pt above the bottom: capsule at x 1412, width 300 (right edge 1712, so 16 pt from the edge), vertical centre 538 pt for a visible centre of 537.5 pt; card at x 544, width 640 (centred), bottom edge 24 pt above the visible frame. `swift test` passes 15 tests. A spoken dictation with the physical Fn key still needs a manual check. (25 October 2026)
+
 ## 25 October 2026: Claude speech-to-text engine (harmonic-asr-8), now the default
 
 Version 3.9 adds the `claude` engine (`Sources/ZenRayDictate/ClaudeVoiceTranscriber.swift`) and makes it the default. Each recording is converted to 16 kHz mono PCM16 and streamed to `wss://api.anthropic.com/api/ws/speech_to_text/voice_stream`, the WebSocket used by claude.ai, Claude Desktop and Claude Code dictation. The query parameter `announce_provider=true` makes the server name its model; on 25 October 2026 it answers `harmonic` / `harmonic-asr-8`. (25 October 2026)

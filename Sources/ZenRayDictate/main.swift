@@ -14,6 +14,32 @@ if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--transcribe" 
     done.wait(); exit(code)
 }
 
+// 25 October 2026, 21:05 CEST: `ZenRayDictate --overlay-preview` shows the B1 capsule (4 s) then the result card (6 s)
+// with synthetic levels, and prints the window numbers so the panels can be captured with screencapture -l.
+if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--overlay-preview" {
+    let previewApp = NSApplication.shared
+    previewApp.setActivationPolicy(.accessory)
+    for font in (Bundle.main.urls(forResourcesWithExtension:"ttf",subdirectory:"Fonts") ?? []) + (Bundle.main.urls(forResourcesWithExtension:"otf",subdirectory:"Fonts") ?? []) {
+        CTFontManagerRegisterFontsForURL(font as CFURL,.process,nil)
+    }
+    MainActor.assumeIsolated {
+        let overlay = ClaudeOverlay()
+        overlay.showRecording()
+        var phase = 0.0
+        let levels = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            phase += 0.35; MainActor.assumeIsolated { overlay.add(level: Float(0.12 + 0.3 * abs(sin(phase) * sin(phase * 0.37)))) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { print("capsule window \(NSApp.windows.filter { $0.isVisible }.map(\.windowNumber))"); fflush(stdout) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            levels.invalidate()
+            MainActor.assumeIsolated { overlay.showResult("Bonjour, je teste la dictée de Claude avec Houdini et Unreal Engine.", insertable: true) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { print("card window \(NSApp.windows.filter { $0.isVisible && $0.alphaValue > 0.5 }.map(\.windowNumber))"); fflush(stdout) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { exit(0) }
+    }
+    previewApp.run()
+}
+
 // 5 October 2026: Single-instance guard prevents duplicate WebKit data store conflicts.
 let bundleID = Bundle.main.bundleIdentifier ?? "com.zenray.dictate"
 let runningApps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
@@ -23,7 +49,7 @@ if let existing = runningApps.first(where: { $0.processIdentifier != ProcessInfo
 }
 
 // 3 October 2026, 19:55 CEST: register bundled fonts before constructing any native window.
-for font in Bundle.main.urls(forResourcesWithExtension:"ttf",subdirectory:"Fonts") ?? [] {
+for font in (Bundle.main.urls(forResourcesWithExtension:"ttf",subdirectory:"Fonts") ?? []) + (Bundle.main.urls(forResourcesWithExtension:"otf",subdirectory:"Fonts") ?? []) {
     CTFontManagerRegisterFontsForURL(font as CFURL,.process,nil)
 }
 let app = NSApplication.shared
