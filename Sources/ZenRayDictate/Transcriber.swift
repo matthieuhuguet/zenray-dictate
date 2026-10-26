@@ -97,6 +97,7 @@ private final class LocalWhisperTranscriber: @unchecked Sendable {
 
 
     func transcribe(audioURL: URL) async throws -> TranscriptionResult {
+        if AudioLevel.isSilent(audioURL) { Log.write("local engine skipped: the recording is silent"); throw ClaudeDictationFailure.empty }
         let settings = DictationLibrary.shared.document.preferences
         let terms = DictationLibrary.shared.document.vocabulary.map(\.written).joined(separator: ", ")
         guard FileManager.default.isExecutableFile(atPath: settings.whisperExecutable),

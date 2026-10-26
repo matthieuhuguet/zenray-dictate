@@ -1,3 +1,13 @@
+![ZenRay Dictate: the recording capsule on the right and the result card at the bottom, both in Claude orange](docs/ZenRayDictate-sheet.png)
+
+## 26 October 2026: red interface for the local Whisper, silence gate and new icon (version 3.15)
+
+The interface tells which engine answers. Claude is terracotta; whenever the local Whisper takes over, the capsule and the card turn red (tint, border, microphone button, waveform): from the first second if the engine is local or Claude is known to be down, and the moment the fallback starts otherwise (`ClaudeOverlay.Theme`, values in `ClaudeOverlay.Tokens`, `localAccent` `#D62828`). Proven in the real flow with a dead Claude server: the capsule stays terracotta while recording, turns red when `health: local Whisper fallback used` is logged, and the card is red (`docs/widgets/real-flow-whisper-fallback-sequence.png`). `ZenRayDictate --overlay-preview local` shows the red widgets without speaking. (26 October 2026)
+
+Silence gate: a recording whose peak is under -42 dBFS is never sent to the local engines (`AudioLevel.swift`), because Whisper invented « Thank you. » and « Mm. » on a recording peaking at -44.8 dBFS; the card says « Rien entendu » and no recording is kept. (26 October 2026)
+
+The app icon uses the base colour `#e96944` with the same gradient as before (top toward white, bottom darker), rendered by `Scripts/RenderClaudeIcon.swift`. `Scripts/MakeSheet.py` builds the presentation sheet of the two orange widgets (`docs/ZenRayDictate-sheet.png`, the header above and the ZenRay Assets project thumbnail); the captures are in `docs/widgets/`. GitHub offers no API for a repository's social preview image, so the sheet is the README header. (26 October 2026)
+
 ## 26 October 2026: making the dictation durable (version 3.14)
 
 The Claude dictation endpoint is not an official API: it was found by reverse engineering on 25 October 2026, so it can change without notice. Version 3.14 assumes that and adds three safeguards. (26 October 2026)

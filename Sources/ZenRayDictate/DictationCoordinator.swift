@@ -46,6 +46,8 @@ final class DictationCoordinator {
         }
         overlay.onInsert = { [weak self] in self?.insertLast() }
         overlay.onRetry = { [weak self] in self?.overlay.hide(); self?.retry() }
+        // The interface turns red the moment the local Whisper takes over from Claude. / l'interface passe au rouge.
+        ClaudeHealth.shared.onFallbackStarted = { [weak self] in self?.overlay.setTheme(.local) }
         // 26 October 2026: keep the Claude sign-in fresh (it lasts about 8 h) so that pressing Fn never waits for a renewal.
         upkeepSignIn()
         Timer.scheduledTimer(withTimeInterval: ClaudeCredentials.shared.settings.checkInterval, repeats: true) { [weak self] _ in
@@ -131,7 +133,11 @@ final class DictationCoordinator {
                 }
             }
             _ = try capture.start(); state = .recording
-            overlay.showRecording()
+            // Red from the first second when the answer will come from the local engine (chosen engine, or Claude known to be down).
+            let chosen = library.document.preferences
+            let willBeLocal = chosen.engine == .whisper || chosen.engine == .parakeet || chosen.localOnly
+                || (chosen.engine == .claude && ClaudeHealth.shared.isDegraded)
+            overlay.showRecording(theme: willBeLocal ? .local : .claude)
         } catch {
             live?.cancel(); live = nil; capture.onPCM16 = nil      // never leave a socket open after a failed start
             fail(error.localizedDescription); command = false
@@ -225,10 +231,15 @@ final class DictationCoordinator {
                 if ownsAudio { try FileManager.default.removeItem(at:audio) }
                 pendingURL = nil; if ownsAudio { try? FileManager.default.removeItem(at:pendingFile) }; state = .idle; command = false; handsFree = false; onUpdate?()
                 if let insertionError { fail(insertionError.localizedDescription) }
-                else if insert { overlay.showResult(output, insertable: destination != nil && !inserted) }
+                else if insert { overlay.showResult(output, insertable: destination != nil && !inserted, local: result.provider.hasPrefix("Local")) }
                 else { capsule.show((library.document.preferences.keepHistory ? "Saved to History · " : "Copied · ") + result.provider); dismissLater() }
             } catch {
                 state = .idle; command = false; handsFree = false
+                if let failure = error as? ClaudeDictationFailure, failure == .empty {
+                    // Nothing was said: no retry, no saved recording. / rien n'a été dit : ni réessai ni enregistrement gardé.
+                    if ownsAudio { try? FileManager.default.removeItem(at: audio); try? FileManager.default.removeItem(at: pendingFile); pendingURL = nil }
+                    overlay.showMessage(failure.localizedDescription, title: "Rien entendu"); onUpdate?(); return
+                }
                 fail(error.localizedDescription + (ownsAudio ? " Enregistrement conservé." : ""), retry: ownsAudio)
             }
         }

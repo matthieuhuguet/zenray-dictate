@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 @testable import ZenRayDictate
 
 // 26 October 2026, 11:50 CEST: the expired sign-in incident (« There was a bad response from the server »).
@@ -158,5 +159,35 @@ final class ClaudeCredentialsTests: XCTestCase {
         await c.keepFresh(cli: "cli")
         XCTAssertEqual(refreshes.value, 0, "the CLI ignores a token with 20 minutes left: calling it would be a no-op that costs a model call")
         XCTAssertLessThan(ClaudeCredentials().settings.refreshMargin, 300, "must stay under the CLI's 300 s buffer")
+    }
+
+    // MARK: Silence gate and red theme (26 October 2026)
+
+    private func writeWav(amplitude: Float, seconds: Double = 1) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".wav")
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false)!
+        let file = try AVAudioFile(forWriting: url, settings: [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16_000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false])
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(16_000 * seconds))!
+        buffer.frameLength = buffer.frameCapacity
+        for i in 0..<Int(buffer.frameLength) { buffer.floatChannelData![0][i] = amplitude * sin(Float(i) * 0.1) }
+        try file.write(from: buffer)
+        return url
+    }
+
+    func testSilenceGateCatchesTheMeasuredHallucinationCase() throws {
+        // The kept recording that made Whisper answer « Thank you. » peaked at -44.8 dBFS (0.0057 of full scale).
+        let quiet = try writeWav(amplitude: 0.0057), speech = try writeWav(amplitude: 0.1), zeros = try writeWav(amplitude: 0)
+        XCTAssertTrue(AudioLevel.isSilent(quiet), "peak -44.8 dBFS is room noise")
+        XCTAssertTrue(AudioLevel.isSilent(zeros))
+        XCTAssertFalse(AudioLevel.isSilent(speech), "peak -20 dBFS is speech")
+        XCTAssertFalse(AudioLevel.isSilent(URL(fileURLWithPath: "/nonexistent.wav")), "an unreadable file is not called silent")
+    }
+
+    @MainActor func testWhisperFallbackAnnouncesItselfSoTheInterfaceCanTurnRed() {
+        var fired = 0
+        ClaudeHealth.shared.onFallbackStarted = { fired += 1 }
+        ClaudeHealth.shared.noteFallback(reason: "test")
+        XCTAssertEqual(fired, 1)
+        ClaudeHealth.shared.onFallbackStarted = nil
     }
 }

@@ -23,7 +23,10 @@ final class ClaudeHealth {
     private(set) var state: State = .unknown
     private(set) var lastFallback: (reason: String, at: Date)?
     var onChange: (() -> Void)?
+    /// Fired the moment the local Whisper takes over, before it runs, so the interface can turn red. / au moment où Whisper prend le relais.
+    var onFallbackStarted: (() -> Void)?
     private var running = false
+    var isDegraded: Bool { if case .degraded = state { return true }; return false }
 
     /// What a check outcome means. Pure, tested. Busy and offline say nothing about the engine, so they never raise an alarm.
     /// FR : ce que veut dire le résultat ; occupé ou hors ligne ne prouvent rien contre le moteur.
@@ -69,6 +72,7 @@ final class ClaudeHealth {
     func noteFallback(reason: String) {
         lastFallback = (reason, Date())
         Log.write("health: local Whisper fallback used (\(reason))")
+        onFallbackStarted?()
         onChange?()
     }
 

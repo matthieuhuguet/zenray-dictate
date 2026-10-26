@@ -28,6 +28,12 @@ final class ClaudeOverlay {
         static let fade: TimeInterval = 0.18
         static let tintTop = 0.62, tintBottom = 0.42, rim = 0.60
         static let cream = NSColor(srgbRed: 1.0, green: 248/255, blue: 238/255, alpha: 1)
+        // 26 October 2026: red theme, shown whenever the local Whisper answers instead of Claude (Matthieu's request). Terracotta stays for Claude.
+        // FR : thème rouge quand Whisper local répond à la place de Claude ; le terracotta reste celui de Claude.
+        static let localAccent = NSColor(srgbRed: 214/255, green: 40/255, blue: 40/255, alpha: 1)
+        static let localAccentDeep = NSColor(srgbRed: 168/255, green: 24/255, blue: 30/255, alpha: 1)
+        static let localTint = NSColor(srgbRed: 1.0, green: 224/255, blue: 220/255, alpha: 1)
+        static let localBorderAlpha = 0.65, localBorderWidth: CGFloat = 1.5
         static let clay = NSColor(srgbRed: 217/255, green: 119/255, blue: 87/255, alpha: 1)
         static let clayDeep = NSColor(srgbRed: 184/255, green: 92/255, blue: 62/255, alpha: 1)
         static let ink = NSColor(srgbRed: 42/255, green: 38/255, blue: 34/255, alpha: 1)
@@ -40,8 +46,21 @@ final class ClaudeOverlay {
     var onRetry: (() -> Void)?     // 26 October 2026: retries the saved recording after a failure. / réessaie l'enregistrement gardé.
     var onCopy: (() -> Void)?
 
+    /// Which engine the interface reports: terracotta for Claude, red for the local Whisper. / terracotta pour Claude, rouge pour Whisper.
+    enum Theme: Equatable {
+        case claude, local
+        var accent: NSColor { self == .local ? Tokens.localAccent : Tokens.clay }
+        var deep: NSColor { self == .local ? Tokens.localAccentDeep : Tokens.clayDeep }
+        var tint: NSColor { self == .local ? Tokens.localTint : Tokens.cream }
+        var border: NSColor { self == .local ? Tokens.localAccent.withAlphaComponent(Tokens.localBorderAlpha) : NSColor.white.withAlphaComponent(Tokens.rim * 0.5) }
+        var borderWidth: CGFloat { self == .local ? Tokens.localBorderWidth : 1 }
+    }
+    private(set) var theme: Theme = .claude
     private let capsule: NSPanel
     private let card: NSPanel
+    private let capsuleTint: CAGradientLayer
+    private let cardTint: CAGradientLayer
+    private var micButton: NSView?
     private let bars = BarsView()
     private let timer = NSTextField(labelWithString: "0:00")
     private let halo = CALayer()
@@ -54,14 +73,36 @@ final class ClaudeOverlay {
     private var outsideMonitors: [Any] = []
 
     init() {
-        capsule = Self.glassPanel(size: Tokens.capsuleSize, radius: Tokens.capsuleSize.height / 2)
-        card = Self.glassPanel(size: NSSize(width: Tokens.cardWidth, height: 120), radius: Tokens.cardRadius)
+        let capsuleGlass = Self.glassPanel(size: Tokens.capsuleSize, radius: Tokens.capsuleSize.height / 2)
+        let cardGlass = Self.glassPanel(size: NSSize(width: Tokens.cardWidth, height: 120), radius: Tokens.cardRadius)
+        capsule = capsuleGlass.panel; capsuleTint = capsuleGlass.tint
+        card = cardGlass.panel; cardTint = cardGlass.tint
         buildCapsule(); buildCard()
+    }
+
+    /// Recolours both panels: tint, border, microphone button, halo, waveform and title. / recolore les deux panneaux.
+    func setTheme(_ new: Theme) {
+        guard new != theme else { return }
+        theme = new
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        for (tint, panel) in [(capsuleTint, capsule), (cardTint, card)] {
+            tint.colors = [new.tint.withAlphaComponent(Tokens.tintTop).cgColor, new.tint.withAlphaComponent(Tokens.tintBottom).cgColor]
+            panel.contentView?.layer?.borderColor = new.border.cgColor
+            panel.contentView?.layer?.borderWidth = new.borderWidth
+        }
+        micButton?.layer?.backgroundColor = new.accent.cgColor
+        halo.backgroundColor = new.accent.withAlphaComponent(0.28).cgColor
+        bars.accent = new.accent
+        titleLabel.textColor = new.deep
+        CATransaction.commit()
+        capsule.invalidateShadow(); card.invalidateShadow()
+        Log.write("overlay: theme \(new == .local ? "red (local Whisper)" : "terracotta (Claude)")")
     }
 
     // MARK: States
 
-    func showRecording() {
+    func showRecording(theme: Theme = .claude) {
+        setTheme(theme)
         hideCard(animated: false)
         bars.reset(); bars.dimmed = false
         startedAt = Date(); timer.stringValue = "0:00"
@@ -88,13 +129,15 @@ final class ClaudeOverlay {
         if !capsule.isVisible { fadeIn(capsule) }
     }
 
-    func showResult(_ text: String, insertable: Bool) {
+    func showResult(_ text: String, insertable: Bool, local: Bool = false) {
+        setTheme(local ? .local : .claude)
         present(title: "Transcription", text: text, showCopy: true, showInsert: insertable)
         Log.write("overlay: result card at bottom centre, \(text.count) characters")
     }
 
     /// An error or a short notice. `retry` adds one « Réessayer » action for the saved recording.
     func showMessage(_ message: String, title: String = "Dictée impossible", retry: Bool = false) {
+        setTheme(.claude)
         present(title: title, text: message, showCopy: false, showInsert: false, showRetry: retry)
     }
 
@@ -112,7 +155,7 @@ final class ClaudeOverlay {
         return NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
     }
 
-    private static func glassPanel(size: NSSize, radius: CGFloat) -> NSPanel {
+    private static func glassPanel(size: NSSize, radius: CGFloat) -> (panel: NSPanel, tint: CAGradientLayer) {
         let panel = OverlayPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isFloatingPanel = true; panel.hidesOnDeactivate = false; panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
@@ -132,14 +175,15 @@ final class ClaudeOverlay {
         glass.layer?.addSublayer(tint)
         glass.layer?.borderWidth = 1; glass.layer?.borderColor = NSColor.white.withAlphaComponent(Tokens.rim * 0.5).cgColor
         panel.contentView = glass
-        return panel
+        return (panel, tint)
     }
 
     private func buildCapsule() {
         guard let glass = capsule.contentView else { return }
         let h = Tokens.capsuleSize.height, w = Tokens.capsuleSize.width, b = Tokens.micButton
         let button = NSView(frame: NSRect(x: 14, y: (h - b) / 2, width: b, height: b))
-        button.wantsLayer = true; button.layer?.cornerRadius = b / 2; button.layer?.backgroundColor = Tokens.clay.cgColor
+        micButton = button
+        button.wantsLayer = true; button.layer?.cornerRadius = b / 2; button.layer?.backgroundColor = theme.accent.cgColor
         halo.frame = button.frame.insetBy(dx: -4, dy: -4); halo.cornerRadius = halo.frame.width / 2
         halo.backgroundColor = Tokens.clay.withAlphaComponent(0.28).cgColor
         glass.layer?.addSublayer(halo)
@@ -298,6 +342,7 @@ private final class ActionButton: NSButton {
 /// Live waveform: one bar per level, newest on the right. / onde en direct, la plus récente à droite.
 private final class BarsView: NSView {
     var dimmed = false { didSet { needsDisplay = true } }
+    var accent = ClaudeOverlay.Tokens.clay { didSet { needsDisplay = true } }
     private var levels: [CGFloat] = []
     private var count: Int { max(1, Int((bounds.width + ClaudeOverlay.Tokens.barGap) / (ClaudeOverlay.Tokens.barWidth + ClaudeOverlay.Tokens.barGap))) }
     func add(level: CGFloat) {
@@ -308,7 +353,7 @@ private final class BarsView: NSView {
     func reset() { levels = []; needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
         let t = ClaudeOverlay.Tokens.self
-        t.clay.withAlphaComponent(dimmed ? 0.4 : 1).setFill()
+        accent.withAlphaComponent(dimmed ? 0.4 : 1).setFill()
         let padded = Array(repeating: CGFloat(0), count: max(0, count - levels.count)) + levels
         for (i, level) in padded.enumerated() {
             let h = t.barMin + (t.barMax - t.barMin) * level

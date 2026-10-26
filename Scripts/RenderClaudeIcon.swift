@@ -5,9 +5,13 @@ struct IconParams {
     static let squircle: CGFloat = 824 / 1024      // macOS icon grid: 824 pt body on a 1024 canvas
     static let radiusRatio: CGFloat = 0.225
     static let symbolRatio: CGFloat = 0.56          // mic.fill height relative to the squircle
-    static let top = NSColor(srgbRed: 233/255, green: 151/255, blue: 122/255, alpha: 1)
-    static let mid = NSColor(srgbRed: 217/255, green: 119/255, blue: 87/255, alpha: 1)
-    static let bottom = NSColor(srgbRed: 189/255, green: 95/255, blue: 64/255, alpha: 1)
+    // 26 October 2026: base colour #e96944 chosen by Matthieu, same gradient as before. The top blends toward white, the bottom darkens.
+    // FR : couleur #e96944 choisie par Matthieu, même dégradé qu'avant : le haut tire vers le blanc, le bas fonce.
+    static let baseRed: CGFloat = 0xe9 / 255, baseGreen: CGFloat = 0x69 / 255, baseBlue: CGFloat = 0x44 / 255
+    static let whiteMix: CGFloat = 0.25, darken: CGFloat = 0.84
+    static let mid = NSColor(srgbRed: baseRed, green: baseGreen, blue: baseBlue, alpha: 1)
+    static let top = NSColor(srgbRed: baseRed + (1 - baseRed) * whiteMix, green: baseGreen + (1 - baseGreen) * whiteMix, blue: baseBlue + (1 - baseBlue) * whiteMix, alpha: 1)
+    static let bottom = NSColor(srgbRed: baseRed * darken, green: baseGreen * darken, blue: baseBlue * darken, alpha: 1)
     static let highlight: CGFloat = 0.28
 }
 func render(_ px: Int) -> Data {

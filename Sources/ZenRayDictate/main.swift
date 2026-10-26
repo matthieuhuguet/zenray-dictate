@@ -18,7 +18,9 @@ if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--transcribe" 
 
 // 25 October 2026, 21:05 CEST: `ZenRayDictate --overlay-preview` shows the B1 capsule (4 s) then the result card (6 s)
 // with synthetic levels, and prints the window numbers so the panels can be captured with screencapture -l.
-if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--overlay-preview" {
+// 26 October 2026: `--overlay-preview local` shows the red theme used when the local Whisper answers.
+if CommandLine.arguments.count >= 2, CommandLine.arguments[1] == "--overlay-preview" {
+    let previewLocal = CommandLine.arguments.contains("local")
     let previewApp = NSApplication.shared
     previewApp.setActivationPolicy(.accessory)
     for font in (Bundle.main.urls(forResourcesWithExtension:"ttf",subdirectory:"Fonts") ?? []) + (Bundle.main.urls(forResourcesWithExtension:"otf",subdirectory:"Fonts") ?? []) {
@@ -26,7 +28,7 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--overlay-prev
     }
     MainActor.assumeIsolated {
         let overlay = ClaudeOverlay()
-        overlay.showRecording()
+        overlay.showRecording(theme: previewLocal ? .local : .claude)
         var phase = 0.0
         let levels = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             phase += 0.35; MainActor.assumeIsolated { overlay.add(level: Float(0.12 + 0.3 * abs(sin(phase) * sin(phase * 0.37)))) }
@@ -34,7 +36,7 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--overlay-prev
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { print("capsule window \(NSApp.windows.filter { $0.isVisible }.map(\.windowNumber))"); fflush(stdout) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
             levels.invalidate()
-            MainActor.assumeIsolated { overlay.showResult("Bonjour, je teste la dictée de Claude avec Houdini et Unreal Engine.", insertable: true) }
+            MainActor.assumeIsolated { overlay.showResult("Bonjour, je teste la dictée de Claude avec Houdini et Unreal Engine.", insertable: true, local: previewLocal) }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { print("card window \(NSApp.windows.filter { $0.isVisible && $0.alphaValue > 0.5 }.map(\.windowNumber))"); fflush(stdout) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { exit(0) }
