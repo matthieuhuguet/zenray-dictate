@@ -75,11 +75,11 @@ final class ClaudeCredentialsTests: XCTestCase {
     func testKeepFreshRefreshesOnlyWhenLessThanTheMarginRemains() async {
         let refreshes = Counter(); let renewed = Counter()
         var fresh = true
-        let c = store(keychain: { renewed.value > 0 ? self.lease("NEW", in: 28800) : self.lease("OLD", in: fresh ? 6 * 3600 : 600) },
+        let c = store(keychain: { renewed.value > 0 ? self.lease("NEW", in: 28800) : self.lease("OLD", in: fresh ? 6 * 3600 : 200) },
                       refresh: { _ in refreshes.bump(); renewed.bump() })
         await c.keepFresh(cli: "cli"); XCTAssertEqual(refreshes.value, 0, "6 hours left: nothing to do")
-        fresh = false
-        await c.keepFresh(cli: "cli"); XCTAssertEqual(refreshes.value, 1, "10 minutes left: renew in the background")
+        fresh = false; c.forget()
+        await c.keepFresh(cli: "cli"); XCTAssertEqual(refreshes.value, 1, "under 5 minutes left: the CLI renews, so renew now")
     }
 
     // MARK: Error classification
@@ -150,5 +150,13 @@ final class ClaudeCredentialsTests: XCTestCase {
         } catch { guard case ClaudeDictationFailure.network = error else { return XCTFail("wrong error \(error)") } }
         let quick = try? await TranscriptionPipeline.withDeadline(seconds: 5) { "fast" }
         XCTAssertEqual(quick, "fast")
+    }
+
+    func testKeepFreshDoesNotCallTheCLIBeforeItsFiveMinuteWindow() async {
+        let refreshes = Counter()
+        let c = store(keychain: { self.lease("OLD", in: 20 * 60) }, refresh: { _ in refreshes.bump() })
+        await c.keepFresh(cli: "cli")
+        XCTAssertEqual(refreshes.value, 0, "the CLI ignores a token with 20 minutes left: calling it would be a no-op that costs a model call")
+        XCTAssertLessThan(ClaudeCredentials().settings.refreshMargin, 300, "must stay under the CLI's 300 s buffer")
     }
 }

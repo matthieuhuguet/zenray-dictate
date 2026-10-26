@@ -54,9 +54,13 @@ final class ClaudeCredentials: @unchecked Sendable {
     struct Settings {
         var keychainService = "Claude Code-credentials"
         var skew: TimeInterval = 120               // a token expiring within 2 minutes counts as expired
-        var refreshMargin: TimeInterval = 1800     // refresh in the background when less than 30 minutes remain
+        // The Claude CLI renews a token only inside its own 5-minute buffer (function HT in Claude Code 2.1.308: now + 300000 >= expiresAt,
+        // read in the binary on 26 October 2026) and ignores it before. Calling it earlier is a useless no-op, so the margin stays below 300 s.
+        // FR : le CLI ne renouvelle que dans les 5 dernières minutes ; appeler plus tôt ne fait rien.
+        var refreshMargin: TimeInterval = 280      // renew in the background when less than this remains
         var refreshTimeout: TimeInterval = 30      // the Claude CLI call must finish within this
-        var checkInterval: TimeInterval = 300      // background check period
+        var checkInterval: TimeInterval = 60       // background check period; it only reads the cache until the last 15 minutes
+        var rereadWithin: TimeInterval = 900       // below this many seconds the keychain is read again (Claude Code may have renewed it)
     }
     var settings = Settings()
 
@@ -84,6 +88,7 @@ final class ClaudeCredentials: @unchecked Sendable {
 
     /// Seconds before the stored token expires, nil when unreadable. / secondes avant l'expiration.
     func remaining() -> TimeInterval? {
+        if let cached = cachedLease(), cached.expiresAt.timeIntervalSince(now()) > settings.rereadWithin { return cached.expiresAt.timeIntervalSince(now()) }
         if let read = try? readKeychain() { store(read); return read.expiresAt.timeIntervalSince(now()) }
         return cachedLease()?.expiresAt.timeIntervalSince(now())
     }
@@ -107,7 +112,7 @@ final class ClaudeCredentials: @unchecked Sendable {
         guard let left = remaining() else { return }
         guard left < settings.refreshMargin else { return }
         Log.write("Claude sign-in expires in \(Int(left)) s; refreshing in the background")
-        do { _ = try await refresh(cli: cli); Log.write("Claude sign-in refreshed") }
+        do { let lease = try await refresh(cli: cli); Log.write("Claude sign-in renewed, valid \(Int(lease.expiresAt.timeIntervalSince(now()) / 3600)) h more") }
         catch { Log.write("Claude sign-in refresh failed: \(error.localizedDescription)") }
     }
 
