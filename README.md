@@ -1,8 +1,8 @@
 ![ZenRay Dictate: the recording capsule on the right and the result card at the bottom, both in Claude orange](docs/ZenRayDictate-sheet.png)
 
-## 26 October 2026: Literata and GT Standard L by default (version 3.16)
+## 26 October 2026: GT Ultra, Literata and GT Standard L by default (version 3.16)
 
-The received text of the card is set in Literata, the timer and the buttons in GT Standard L Regular (numbers always GT Standard L), the titles of the presentation sheet in GT Standard L Bold capitals. They are the default trio; GT Sectra, Anthropic Serif and Inter stay valid alternatives. The three font names are `ClaudeOverlay.Tokens.titleFont`, `textFont`, `uiFont`, `numberFont`, and `build.sh` bundles the drawings. `Scripts/MakeSheet.py` carries the same trio in `PARAMS`. (26 October 2026)
+The received text of the card is set in Literata. Titles and every number (the timer, the title of the presentation sheet) are set in GT Ultra Regular, free case and no imposed letter spacing; the rest of the interface (buttons, labels) is GT Standard L Regular. They are the default fonts; GT Sectra, Anthropic Serif and Inter stay valid alternatives. The four font names are `ClaudeOverlay.Tokens.titleFont`, `textFont`, `uiFont`, `numberFont`, and `build.sh` bundles the drawings. `Scripts/MakeSheet.py` carries the same choice in `PARAMS`. (26 October 2026)
 
 ## 26 October 2026: red interface for the local Whisper, silence gate and new icon (version 3.15)
 

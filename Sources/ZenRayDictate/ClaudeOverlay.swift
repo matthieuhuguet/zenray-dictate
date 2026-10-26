@@ -38,10 +38,10 @@ final class ClaudeOverlay {
         static let clayDeep = NSColor(srgbRed: 184/255, green: 92/255, blue: 62/255, alpha: 1)
         static let ink = NSColor(srgbRed: 42/255, green: 38/255, blue: 34/255, alpha: 1)
         static let muted = NSColor(srgbRed: 124/255, green: 115/255, blue: 104/255, alpha: 1)
-        // 26 October 2026: default trio = Literata (read text), GT Standard L Bold (titles), GT Standard L Regular (UI and every number).
-        // The earlier drawings (GT Sectra, Anthropic Serif, Inter) stay valid alternatives: change these three names only.
-        // FR : trio par défaut ; les anciennes polices restent des alternatives, il suffit de changer ces trois noms.
-        static let titleFont = "GTStandard-LBold", textFont = "Literata-Regular", uiFont = "GTStandard-LRegular", numberFont = "GTStandard-LRegular"
+        // 26 October 2026: default fonts. Titles and every number = GT Ultra Regular, read text = Literata, the rest of the UI = GT Standard L.
+        // The earlier drawings (GT Sectra, Anthropic Serif, Inter) stay valid alternatives: change these four names only.
+        // FR : polices par défaut ; titres et nombres en GT Ultra, texte reçu en Literata, reste de l'interface en GT Standard L.
+        static let titleFont = "GTUltra-Regular", textFont = "Literata-Regular", uiFont = "GTStandard-LRegular", numberFont = "GTUltra-Regular"
     }
 
     var onInsert: (() -> Void)?

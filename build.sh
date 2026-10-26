@@ -23,8 +23,8 @@ cp "$BIN" "$APP/Contents/MacOS/ZenRayDictate"
 cp Sources/ZenRayDictate/Resources/GeminiBridge.js Sources/ZenRayDictate/Resources/GeminiComposer.js "$APP/Contents/Resources/"
 # 3 October 2026, 19:55 CEST: ship the font drawings used by the native interface.
 mkdir -p "$APP/Contents/Resources/Fonts"
-# 26 October 2026: Literata and GT Standard L are the default trio of the overlay; the older drawings stay bundled as alternatives.
-for FONT_FILE in "Literata[opsz,wght].ttf" GT-Standard-L-Standard-Regular.otf GT-Standard-L-Standard-Bold.otf InterVariable.ttf AnthropicSerif-Regular.ttf AnthropicMono-Regular.ttf GT-Sectra-LCGV-Regular-Italic.otf; do
+# 26 October 2026: Literata, GT Ultra and GT Standard L are the default fonts of the overlay; the older drawings stay bundled as alternatives.
+for FONT_FILE in "Literata[opsz,wght].ttf" GT-Ultra-Standard-Regular.otf GT-Standard-L-Standard-Regular.otf GT-Standard-L-Standard-Bold.otf InterVariable.ttf AnthropicSerif-Regular.ttf AnthropicMono-Regular.ttf GT-Sectra-LCGV-Regular-Italic.otf; do
     cp "$HOME/Library/Fonts/$FONT_FILE" "$APP/Contents/Resources/Fonts/"
 done
 if [[ -f AppIcon.icns ]]; then
