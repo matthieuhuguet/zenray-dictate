@@ -1,5 +1,9 @@
 ![ZenRay Dictate: the recording capsule on the right and the result card at the bottom, both in Claude orange](docs/ZenRayDictate-sheet.png)
 
+## 26 October 2026: Literata and GT Standard L by default (version 3.16)
+
+The received text of the card is set in Literata, the timer and the buttons in GT Standard L Regular (numbers always GT Standard L), the titles of the presentation sheet in GT Standard L Bold capitals. They are the default trio; GT Sectra, Anthropic Serif and Inter stay valid alternatives. The three font names are `ClaudeOverlay.Tokens.titleFont`, `textFont`, `uiFont`, `numberFont`, and `build.sh` bundles the drawings. `Scripts/MakeSheet.py` carries the same trio in `PARAMS`. (26 October 2026)
+
 ## 26 October 2026: red interface for the local Whisper, silence gate and new icon (version 3.15)
 
 The interface tells which engine answers. Claude is terracotta; whenever the local Whisper takes over, the capsule and the card turn red (tint, border, microphone button, waveform): from the first second if the engine is local or Claude is known to be down, and the moment the fallback starts otherwise (`ClaudeOverlay.Theme`, values in `ClaudeOverlay.Tokens`, `localAccent` `#D62828`). Proven in the real flow with a dead Claude server: the capsule stays terracotta while recording, turns red when `health: local Whisper fallback used` is logged, and the card is red (`docs/widgets/real-flow-whisper-fallback-sequence.png`). `ZenRayDictate --overlay-preview local` shows the red widgets without speaking. (26 October 2026)

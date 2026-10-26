@@ -38,7 +38,10 @@ final class ClaudeOverlay {
         static let clayDeep = NSColor(srgbRed: 184/255, green: 92/255, blue: 62/255, alpha: 1)
         static let ink = NSColor(srgbRed: 42/255, green: 38/255, blue: 34/255, alpha: 1)
         static let muted = NSColor(srgbRed: 124/255, green: 115/255, blue: 104/255, alpha: 1)
-        static let titleFont = "GTSectraLCG-RegularItalic", textFont = "AnthropicSerif-Regular", uiFont = "InterVariable-Medium"
+        // 26 October 2026: default trio = Literata (read text), GT Standard L Bold (titles), GT Standard L Regular (UI and every number).
+        // The earlier drawings (GT Sectra, Anthropic Serif, Inter) stay valid alternatives: change these three names only.
+        // FR : trio par défaut ; les anciennes polices restent des alternatives, il suffit de changer ces trois noms.
+        static let titleFont = "GTStandard-LBold", textFont = "Literata-Regular", uiFont = "GTStandard-LRegular", numberFont = "GTStandard-LRegular"
     }
 
     var onInsert: (() -> Void)?
@@ -193,7 +196,7 @@ final class ClaudeOverlay {
         button.addSubview(mic)
         glass.addSubview(button)
         timer.frame = NSRect(x: w - 54, y: (h - 20) / 2, width: 40, height: 20)
-        timer.font = NSFont(name: Tokens.textFont, size: 14) ?? .systemFont(ofSize: 14)
+        timer.font = NSFont(name: Tokens.numberFont, size: 14) ?? .systemFont(ofSize: 14)
         timer.textColor = Tokens.muted; timer.alignment = .right
         glass.addSubview(timer)
         bars.frame = NSRect(x: 14 + b + 12, y: (h - Tokens.barMax) / 2, width: w - (14 + b + 12) - 62, height: Tokens.barMax)

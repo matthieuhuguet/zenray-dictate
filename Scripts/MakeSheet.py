@@ -22,9 +22,12 @@ PARAMS = {
     'title': 'ZenRay Dictate',
     'subtitle': 'Dictée par la voix : Fn, parle, le texte arrive',
     'tag': 'harmonic-asr-8',
-    'font_title': '/Users/zenray/Library/Fonts/GT-Sectra-LCGV-Regular-Italic.otf',
-    'font_ui': '/Users/zenray/Library/Fonts/InterVariable.ttf',
-    'font_title_size': 104, 'font_subtitle_size': 36, 'font_label_size': 28, 'title_gap': 40,
+    # 26 October 2026: default trio = Literata (read text), GT Standard L Bold capitals (titles), GT Standard L Regular (UI).
+    # Alternatives stay valid: set font_title to GT-Sectra-LCGV-Regular.otf, font_ui to InterVariable.ttf, etc.
+    'font_title': '/Users/zenray/Library/Fonts/GT-Standard-L-Standard-Bold.otf', 'title_case': 'upper', 'title_track': 0.06,
+    'font_body': '/Users/zenray/Library/Fonts/Literata[opsz,wght].ttf', 'body_variation': 'Regular',
+    'font_ui': '/Users/zenray/Library/Fonts/GT-Standard-L-Standard-Regular.otf', 'ui_variation': None,
+    'font_title_size': 84, 'font_subtitle_size': 38, 'font_label_size': 28, 'title_gap': 44,
     'margin': 90,
 }
 
@@ -34,6 +37,14 @@ def font(path, size, variation=None):
         try: f.set_variation_by_name(variation)
         except Exception: pass
     return f
+
+def tracked(draw, xy, text, fnt, fill, track):
+    # letter-spacing in em; PIL has none, so each glyph is placed by its own advance. / interlettrage en em.
+    x, y = xy
+    for ch in text:
+        draw.text((x, y), ch, font=fnt, fill=fill)
+        x += fnt.getlength(ch) + track * fnt.size
+    return x
 
 def build(out):
     P = PARAMS; W, H = P['size']
@@ -56,8 +67,9 @@ def build(out):
     icon = Image.open(os.path.join(ROOT, P['icon'])).convert('RGBA').resize((P['icon_size'], P['icon_size']), Image.LANCZOS)
     bg.alpha_composite(icon, (P['margin'], P['margin']))
     tx = P['margin'] + P['icon_size'] + 36
-    d.text((tx, P['margin'] - 8), P['title'], font=font(P['font_title'], P['font_title_size']), fill=(255, 255, 255, 255))
-    d.text((tx + 4, P['margin'] + P['font_title_size'] + P['title_gap']), P['subtitle'], font=font(P['font_ui'], P['font_subtitle_size'], 'Medium'), fill=(255, 255, 255, 215))
+    title = P['title'].upper() if P['title_case'] == 'upper' else P['title']
+    tracked(d, (tx, P['margin'] + 6), title, font(P['font_title'], P['font_title_size']), (255, 255, 255, 255), P['title_track'])
+    d.text((tx + 4, P['margin'] + P['font_title_size'] + P['title_gap']), P['subtitle'], font=font(P['font_body'], P['font_subtitle_size'], P['body_variation']), fill=(255, 255, 255, 220))
 
     def widget(name):
         img = Image.open(os.path.join(ROOT, P[name])).convert('RGBA')
@@ -68,7 +80,7 @@ def build(out):
     kx = (W - card.width) // 2; ky = H - P['card_bottom'] - card.height
     bg.alpha_composite(card, (kx, ky))
 
-    label = font(P['font_ui'], P['font_label_size'], 'Medium')
+    label = font(P['font_ui'], P['font_label_size'], P['ui_variation'])
     capsule_label = 'Fn : tu parles'
     d.text((cx + capsule.width - d.textlength(capsule_label, font=label) - 8, cy - 46), capsule_label, font=label, fill=(255, 255, 255, 240))
     d.text((kx + 8, ky - 46), 'Fn encore : le texte, déjà copié', font=label, fill=(255, 255, 255, 240))
