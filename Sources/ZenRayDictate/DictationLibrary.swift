@@ -19,7 +19,8 @@ struct DictationMode: Codable, Identifiable, Equatable {
 struct DictationPreferences: Codable {
     var engine: DictationEngine = .claude
     var localOnly = false
-    var allowLocalFallback = false
+    // 26 October 2026: on by default. The Claude endpoint is unofficial; if it fails the local Whisper answers instead of an error.
+    var allowLocalFallback = true
     var keepAudio = false
     var keepHistory = true
     var learnVocabulary = false

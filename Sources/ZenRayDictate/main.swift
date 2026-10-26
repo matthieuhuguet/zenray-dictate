@@ -3,8 +3,10 @@ import CoreText
 
 // 25 October 2026, 19:20 CEST: verification entry point, `ZenRayDictate --transcribe <audio file>` runs the
 // configured Claude engine headless and prints the text, so the engine is testable without the interface.
-if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--transcribe" {
+// 26 October 2026: `--transcribe <file> --bad-token` first seeds a rejected token (valid by the clock) to prove the 401 recovery.
+if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--transcribe" {
     let url = URL(fileURLWithPath: CommandLine.arguments[2])
+    if CommandLine.arguments.contains("--bad-token") { ClaudeCredentials.shared.seed(token: "rejected-token-for-test", expiresAt: Date().addingTimeInterval(3600)) }
     let done = DispatchSemaphore(value: 0); var code: Int32 = 0
     Task.detached {
         do { let result = try await ClaudeVoiceTranscriber().transcribe(audioURL: url); print("\(result.provider)\t\(result.text)") }
@@ -40,16 +42,49 @@ if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--overlay-prev
     previewApp.run()
 }
 
+// 26 October 2026, 12:20 CEST: `--transcribe-pipeline <file> [--dead-server] [--no-fallback]` runs the real pipeline (Claude, then the local
+// Whisper fallback). --dead-server points the engine at a closed port to prove the fallback; --no-fallback shows the failure it prevents.
+if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--transcribe-pipeline" {
+    let url = URL(fileURLWithPath: CommandLine.arguments[2])
+    let done = DispatchSemaphore(value: 0); var code: Int32 = 0
+    Task.detached {
+        if CommandLine.arguments.contains("--dead-server") { DictationLibrary.shared.document.preferences.claudeVoiceBaseURL = "ws://127.0.0.1:9" }
+        DictationLibrary.shared.document.preferences.allowLocalFallback = !CommandLine.arguments.contains("--no-fallback")
+        let started = Date()
+        do { let result = try await TranscriptionPipeline().transcribe(audioURL: url); print("\(result.provider) after \(Int(Date().timeIntervalSince(started) * 1000)) ms\t\(result.text)") }
+        catch { FileHandle.standardError.write(Data("ERROR after \(Int(Date().timeIntervalSince(started) * 1000)) ms: \(error.localizedDescription)\n".utf8)); code = 1 }
+        done.signal()
+    }
+    // The main run loop must keep turning: the pipeline reports to the main actor (ClaudeHealth), as it does inside the app.
+    while done.wait(timeout: .now() + 0.05) == .timedOut { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+    exit(code)
+}
+
+// 26 October 2026: `--health` runs one real health check (0.6 s of silence through a live session) and prints the verdict.
+if CommandLine.arguments.count >= 2, CommandLine.arguments[1] == "--health" {
+    let done = DispatchSemaphore(value: 0)
+    Task { @MainActor in
+        // --wrong-path simulates an endpoint that moved: the check must raise the alarm. / simule un point d'accès déplacé.
+        if CommandLine.arguments.contains("--wrong-path") { DictationLibrary.shared.document.preferences.claudeVoiceBaseURL = "wss://api.anthropic.com/moved" }
+        await ClaudeHealth.shared.check(preferences: DictationLibrary.shared.document.preferences)
+        print(ClaudeHealth.shared.state); done.signal()
+    }
+    while done.wait(timeout: .now() + 0.05) == .timedOut { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
+    exit(0)
+}
+
 // 25 October 2026, 21:50 CEST: `ZenRayDictate --live-latency <audio file>` streams the file through the live session at
 // real-time pace, as a voice would be, then prints how long after the stop the live text and the final text were ready.
-if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--live-latency" {
+if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "--live-latency" {
     let url = URL(fileURLWithPath: CommandLine.arguments[2])
+    if CommandLine.arguments.contains("--bad-token") { ClaudeCredentials.shared.seed(token: "rejected-token-for-test", expiresAt: Date().addingTimeInterval(3600)) }
     let done = DispatchSemaphore(value: 0); var code: Int32 = 0
     Task.detached {
         do {
             let pcm = try ClaudeVoiceTranscriber.pcm16(from: url)
-            _ = try ClaudeVoiceTranscriber.token()
-            let session = try ClaudeLiveSession(preferences: DictationLibrary.shared.document.preferences)
+            let preferences = DictationLibrary.shared.document.preferences
+            let token = try await ClaudeCredentials.shared.freshToken(cli: preferences.claudeExecutable)
+            let session = try ClaudeLiveSession(preferences: preferences, token: token)
             var offset = 0
             while offset < pcm.count { let end = min(offset + 1_280, pcm.count); session.feed(pcm.subdata(in: offset..<end)); offset = end; try await Task.sleep(nanoseconds: 40_000_000) }
             let stop = Date()

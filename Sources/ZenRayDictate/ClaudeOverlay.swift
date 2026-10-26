@@ -37,6 +37,7 @@ final class ClaudeOverlay {
 
     var onInsert: (() -> Void)?
     var onRedo: (() -> Void)?
+    var onRetry: (() -> Void)?     // 26 October 2026: retries the saved recording after a failure. / réessaie l'enregistrement gardé.
     var onCopy: (() -> Void)?
 
     private let capsule: NSPanel
@@ -83,6 +84,7 @@ final class ClaudeOverlay {
         tick?.invalidate(); tick = nil
         bars.dimmed = true; timer.stringValue = "…"
         stopPulse()
+        hideCard(animated: false)      // no result yet: never leave a stale card next to the capsule. / pas de vieille carte.
         if !capsule.isVisible { fadeIn(capsule) }
     }
 
@@ -91,8 +93,9 @@ final class ClaudeOverlay {
         Log.write("overlay: result card at bottom centre, \(text.count) characters")
     }
 
-    func showMessage(_ message: String, title: String = "Dictée impossible") {
-        present(title: title, text: message, showCopy: false, showInsert: false)
+    /// An error or a short notice. `retry` adds one « Réessayer » action for the saved recording.
+    func showMessage(_ message: String, title: String = "Dictée impossible", retry: Bool = false) {
+        present(title: title, text: message, showCopy: false, showInsert: false, showRetry: retry)
     }
 
     func hide() {
@@ -164,17 +167,20 @@ final class ClaudeOverlay {
         actions.orientation = .horizontal; actions.spacing = 16
         actions.setViews([copyButton,
                           ActionButton(symbol: "return", title: "Insérer") { [weak self] in self?.onInsert?() },
-                          ActionButton(symbol: "arrow.clockwise", title: "Refaire") { [weak self] in self?.onRedo?() }], in: .leading)
+                          ActionButton(symbol: "arrow.clockwise", title: "Refaire") { [weak self] in self?.onRedo?() },
+                          ActionButton(symbol: "arrow.clockwise", title: "Réessayer") { [weak self] in self?.onRetry?() }], in: .leading)
         for view in [titleLabel, textLabel, actions] as [NSView] { glass.addSubview(view) }
     }
 
-    private func present(title: String, text: String, showCopy: Bool, showInsert: Bool, animate: Bool = true) {
+    private func present(title: String, text: String, showCopy: Bool, showInsert: Bool, showRetry: Bool = false, animate: Bool = true) {
         tick?.invalidate(); tick = nil; stopPulse(); fadeOut(capsule)
         titleLabel.stringValue = title; textLabel.stringValue = text
         copyButton.setTitle(showCopy ? "Copié" : "Copier")
         actions.views[0].isHidden = !showCopy; actions.views[1].isHidden = !showInsert
-        titleLabel.isHidden = !Tokens.showTitle; actions.isHidden = !Tokens.showActions
-        let full = Tokens.showTitle || Tokens.showActions
+        actions.views[2].isHidden = showRetry; actions.views[3].isHidden = !showRetry
+        let showRow = Tokens.showActions || showRetry
+        titleLabel.isHidden = !Tokens.showTitle; actions.isHidden = !showRow
+        let full = Tokens.showTitle || showRow
         let p = full ? Tokens.cardPadding : Tokens.textOnlyPadding
         let maxInner = Tokens.cardWidth - p.left - p.right
         var inner = maxInner
@@ -184,8 +190,8 @@ final class ClaudeOverlay {
         }
         textLabel.preferredMaxLayoutWidth = inner
         let textHeight = min(Tokens.maxTextHeight, ceil(textLabel.sizeThatFits(NSSize(width: inner, height: .greatestFiniteMagnitude)).height))
-        let titleHeight: CGFloat = Tokens.showTitle ? 20 : 0, actionsHeight: CGFloat = Tokens.showActions ? 18 : 0
-        let gap: CGFloat = Tokens.showTitle ? 4 : 0, gap2: CGFloat = Tokens.showActions ? 10 : 0
+        let titleHeight: CGFloat = Tokens.showTitle ? 20 : 0, actionsHeight: CGFloat = showRow ? 18 : 0
+        let gap: CGFloat = Tokens.showTitle ? 4 : 0, gap2: CGFloat = showRow ? 10 : 0
         let height = p.top + titleHeight + gap + textHeight + gap2 + actionsHeight + p.bottom
         let width = inner + p.left + p.right
         actions.frame = NSRect(x: p.left, y: p.bottom, width: inner, height: actionsHeight)

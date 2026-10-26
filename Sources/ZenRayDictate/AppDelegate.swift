@@ -47,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             TranscriptionPipeline.prepareGemini()
         }
 
+        // 26 October 2026: watch the Claude dictation endpoint (launch, every 6 h, after wake) and show its state in the tooltip.
+        ClaudeHealth.shared.onChange = { [weak self] in self?.updateStatusItemPill() }
+        ClaudeHealth.shared.schedule { [weak self] in self?.flow.state == .idle }
+
         configureDictationShortcut()
         commandHotKey.onPress = { [weak self] in self?.flow.beginCommand() }
         commandHotKey.onRelease = { [weak self] in self?.flow.endCommand() }
@@ -95,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let micName = MicrophoneManager.shared.activeDevice?.name ?? "Microphone"
         let isBt = MicrophoneManager.shared.activeDevice?.transport == .bluetooth
         let warning = isBt ? " (Attention: Casque Bluetooth actif)" : ""
-        statusItem.button?.toolTip = "ZenRay Dictate · Micro actif : \(micName)\(warning) · Clic pour permuter"
+        statusItem.button?.toolTip = "ZenRay Dictate · Micro actif : \(micName)\(warning)" + ClaudeHealth.shared.tooltip(preferences: DictationLibrary.shared.document.preferences) + " · Clic pour permuter"
     }
 
     // 09 October 2026: left click opens the visual microphone switcher popover; right click opens the full menu.

@@ -6,8 +6,11 @@ import Foundation
 // measured on FLEURS: WER en 2.96 %, fr 4.40 %, CER ja 1.22 %, against Nova-3 9.63 / 10.51 / 8.28).
 // 25 October 2026, 21:40 CEST: live mode. Like claude.ai, the socket opens when Fn is pressed and audio is sent
 // while Matthieu speaks; at stop only CloseStream remains, and the latest interim text is shown at once.
+// 26 October 2026, 11:30 CEST: every failure is typed (ClaudeDictationFailure), an expired sign-in is renewed by
+// ClaudeCredentials, a connection lost during the recording never returns a partial text, and busy or offline retries once.
 // FR : moteur de dictée Claude ; en direct, la connexion s'ouvre à l'appui sur Fn et le son part pendant la parole.
 final class ClaudeVoiceTranscriber: @unchecked Sendable {
+    typealias Failure = ClaudeDictationFailure
 
     /// Wire constants of the voice_stream protocol, read from the Claude Code 2.1.308 binary and the
     /// claude.ai bundle of 25 October 2026. User-facing knobs live in DictationPreferences.
@@ -20,33 +23,77 @@ final class ClaudeVoiceTranscriber: @unchecked Sendable {
         static let utteranceEndMs = "1000"
         static let finishTimeoutSeconds: Double = 20
         static let liveFinalTimeoutSeconds: Double = 6
-        static let keychainService = "Claude Code-credentials"
+        static let busyCloseCode = 4029                       // « Too many active sessions »
+        static let busyRetryDelayNanoseconds: UInt64 = 1_500_000_000
+        static let networkRetryDelayNanoseconds: UInt64 = 1_000_000_000
+        static let maxAttempts = 3
+        static let fileDeadlineSeconds: Double = 45          // after this the pipeline falls back to the local Whisper
+        static let maxKeytermLength = 40                      // longer entries are snippets, not bias words
+        static let maxKeytermCharacters = 1500                // total budget of the keyterms query value
     }
 
-    enum Failure: LocalizedError {
-        case noToken, rejected(String), empty
-        var errorDescription: String? {
-            switch self {
-            case .noToken: return "No Claude sign-in found. Open Claude Code or the Claude app once, then retry."
-            case let .rejected(reason): return "Claude dictation refused the request: \(reason)"
-            case .empty: return "Claude dictation returned no text."
+    // MARK: File mode
+
+    /// File mode: used for retries, imports, the composer and as the fallback when the live session fails.
+    func transcribe(audioURL: URL) async throws -> TranscriptionResult {
+        let preferences = DictationLibrary.shared.document.preferences
+        let pcm = try Self.pcm16(from: audioURL)
+        let credentials = ClaudeCredentials.shared
+        var attempt = 0
+        while true {
+            attempt += 1
+            do {
+                let token = try await credentials.freshToken(cli: preferences.claudeExecutable)
+                return try await stream(pcm, preferences: preferences, token: token)
+            } catch let failure as Failure {
+                guard attempt < Wire.maxAttempts else { throw failure }
+                switch failure {
+                case .unauthorized:
+                    // The server rejected a token that looked valid (revoked or expired early): renew it through the CLI.
+                    Log.write("Claude dictation: token rejected by the server; renewing the sign-in (attempt \(attempt))")
+                    credentials.forget()
+                    _ = try await credentials.forceRefresh(cli: preferences.claudeExecutable)
+                case .busy:
+                    Log.write("Claude dictation: server busy; retrying in 1.5 s")
+                    try await Task.sleep(nanoseconds: Wire.busyRetryDelayNanoseconds)
+                case .network where attempt < 2:
+                    Log.write("Claude dictation: network error (\(failure.localizedDescription)); retrying once")
+                    try await Task.sleep(nanoseconds: Wire.networkRetryDelayNanoseconds)
+                default:
+                    throw failure
+                }
             }
         }
     }
 
-    /// File mode: used for retries, imports and as a fallback when the live session fails.
-    func transcribe(audioURL: URL) async throws -> TranscriptionResult {
-        let preferences = DictationLibrary.shared.document.preferences
-        let pcm = try Self.pcm16(from: audioURL)
+    private func stream(_ pcm: Data, preferences: DictationPreferences, token: String) async throws -> TranscriptionResult {
+        let task = URLSession.shared.webSocketTask(with: try Self.request(preferences: preferences, token: token, live: false))
+        task.resume()
+        defer { task.cancel(with: .normalClosure, reason: nil) }
+        let collector = TranscriptCollector()
+        let reader = Task { await collector.read(task) }
         do {
-            return try await stream(pcm, preferences: preferences, token: try Self.token())
-        } catch let Failure.rejected(reason) where reason.localizedCaseInsensitiveContains("authoriz") {
-            // The OAuth token expired: let the official Claude CLI refresh it, then retry once.
-            Log.write("Claude dictation token rejected (\(reason)); refreshing through the Claude CLI")
-            Self.forgetToken()
-            try Self.refreshToken(cli: preferences.claudeExecutable)
-            return try await stream(pcm, preferences: preferences, token: try Self.token())
+            try await task.send(.string("{\"type\":\"KeepAlive\"}"))
+            var offset = 0
+            while offset < pcm.count {
+                let end = min(offset + Wire.chunkBytes, pcm.count)
+                try await task.send(.data(pcm.subdata(in: offset..<end)))
+                offset = end
+                try await Task.sleep(nanoseconds: Wire.chunkPauseNanoseconds)
+            }
+            await collector.markClosing()
+            try await task.send(.string("{\"type\":\"CloseStream\"}"))
+        } catch {
+            // A refused upgrade or a closed socket surfaces here first; the reader may know the precise reason.
+            reader.cancel()
+            if let known = await collector.failure { throw known }
+            throw Failure.classify(error, status: (task.response as? HTTPURLResponse)?.statusCode)
         }
+        let outcome = await collector.wait(seconds: Wire.finishTimeoutSeconds)
+        reader.cancel()
+        if let failure = outcome.failure { throw failure }
+        Log.write("Claude dictation: \(outcome.provider), \(outcome.text.count) characters")
+        return TranscriptionResult(text: outcome.text, provider: "Claude " + outcome.provider)
     }
 
     // MARK: Request
@@ -69,42 +116,16 @@ final class ClaudeVoiceTranscriber: @unchecked Sendable {
         if !preferences.claudeSttProvider.isEmpty { query.append(.init(name: "stt_provider", value: preferences.claudeSttProvider)) }
         let keyterms = Self.keyterms(preferences: preferences)
         if !keyterms.isEmpty { query.append(.init(name: "keyterms", value: keyterms.joined(separator: ","))) }
-        guard var components = URLComponents(string: preferences.claudeVoiceBaseURL + Wire.path) else { throw Failure.rejected("invalid base URL") }
+        guard var components = URLComponents(string: preferences.claudeVoiceBaseURL + Wire.path) else { throw Failure.rejected("adresse du serveur invalide") }
         components.queryItems = query
-        guard let url = components.url else { throw Failure.rejected("invalid base URL") }
+        guard let url = components.url else { throw Failure.rejected("adresse du serveur invalide") }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("cli", forHTTPHeaderField: "x-app")
         return request
     }
 
-    // MARK: File stream
-
-    private func stream(_ pcm: Data, preferences: DictationPreferences, token: String) async throws -> TranscriptionResult {
-        let task = URLSession.shared.webSocketTask(with: try Self.request(preferences: preferences, token: token, live: false))
-        task.resume()
-        defer { task.cancel(with: .normalClosure, reason: nil) }
-        let collector = TranscriptCollector()
-        let reader = Task { await collector.read(task) }
-        try await task.send(.string("{\"type\":\"KeepAlive\"}"))
-        var offset = 0
-        while offset < pcm.count {
-            let end = min(offset + Wire.chunkBytes, pcm.count)
-            try await task.send(.data(pcm.subdata(in: offset..<end)))
-            offset = end
-            try await Task.sleep(nanoseconds: Wire.chunkPauseNanoseconds)
-        }
-        try await task.send(.string("{\"type\":\"CloseStream\"}"))
-        let outcome = await collector.wait(seconds: Wire.finishTimeoutSeconds)
-        reader.cancel()
-        if let error = outcome.error { throw Failure.rejected(error) }
-        let text = outcome.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw Failure.empty }
-        Log.write("Claude dictation: \(outcome.provider), \(text.count) characters")
-        return TranscriptionResult(text: text, provider: "Claude " + outcome.provider)
-    }
-
-    // MARK: Audio, credentials and vocabulary
+    // MARK: Audio and vocabulary
 
     /// Converts the recorded WAV (any format) to 16 kHz mono little-endian Int16.
     static func pcm16(from url: URL) throws -> Data {
@@ -125,57 +146,36 @@ final class ClaudeVoiceTranscriber: @unchecked Sendable {
         return Data(bytes: samples, count: Int(output.frameLength) * 2)
     }
 
-    // The token is read once and kept in memory: reading the keychain through a process cost time on every press.
-    private static let tokenLock = NSLock()
-    nonisolated(unsafe) private static var cachedToken: String?
-    static func forgetToken() { tokenLock.lock(); cachedToken = nil; tokenLock.unlock() }
-
-    /// Reads the Claude Code OAuth token through /usr/bin/security, which the keychain item already trusts.
-    static func token() throws -> String {
-        tokenLock.lock(); if let cachedToken { tokenLock.unlock(); return cachedToken }; tokenLock.unlock()
-        let process = Process(); let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", Wire.keychainService, "-w"]
-        process.standardOutput = pipe; process.standardError = Pipe()
-        try process.run(); process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard process.terminationStatus == 0,
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = object["claudeAiOauth"] as? [String: Any],
-              let token = oauth["accessToken"] as? String, !token.isEmpty else { throw Failure.noToken }
-        tokenLock.lock(); cachedToken = token; tokenLock.unlock()
-        return token
-    }
-
-    /// One tiny headless Claude call refreshes the stored OAuth token, exactly as Claude Code does itself.
-    static func refreshToken(cli: String) throws {
-        guard FileManager.default.isExecutableFile(atPath: cli) else { throw Failure.noToken }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: cli)
-        process.arguments = ["-p", "ok", "--model", "haiku"]
-        process.environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("CLAUDE") }
-        process.standardOutput = Pipe(); process.standardError = Pipe()
-        try process.run(); process.waitUntilExit()
-    }
-
-    /// Bias words: the user's explicit list plus every "written" form of the vocabulary rules.
+    /// Bias words: the user's explicit list plus the « written » form of the vocabulary rules. A bias word is a short term:
+    /// long phrases (snippets) and newlines are skipped, and the whole list stays under `maxKeytermCharacters`, so the
+    /// request URL never grows past what the server accepts. / un mot-clé est un terme court, la liste reste bornée.
     static func keyterms(preferences: DictationPreferences) -> [String] {
         let typed = preferences.claudeKeyterms.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         let learned = DictationLibrary.shared.document.vocabulary.map(\.written)
-        var seen = Set<String>()
-        return (typed + learned).filter { !$0.isEmpty && !$0.contains(",") && seen.insert($0.lowercased()).inserted }
-            .prefix(preferences.claudeKeytermLimit).map { $0 }
+        var seen = Set<String>(); var total = 0; var kept: [String] = []
+        for term in typed + learned {
+            guard !term.isEmpty, term.count <= Wire.maxKeytermLength, !term.contains(","), !term.contains("\n"),
+                  seen.insert(term.lowercased()).inserted, kept.count < preferences.claudeKeytermLimit,
+                  total + term.count + 1 <= Wire.maxKeytermCharacters else { continue }
+            kept.append(term); total += term.count + 1
+        }
+        return kept
     }
 }
 
+struct TranscriptOutcome { let text: String; let provider: String; let failure: ClaudeDictationFailure? }
+
 /// Gathers frames: TranscriptInterim is the live text, TranscriptText a sealed segment, an endpoint closes it.
+/// A socket that closes before CloseStream was sent is a lost connection: its partial text is never returned as final.
 actor TranscriptCollector {
     private var finals: [String] = []
     private var current = ""
     private var interim = ""
     private(set) var provider = "harmonic"
-    private var error: String?
+    private(set) var failure: ClaudeDictationFailure?
     private var finished = false
+    private var closing = false
+    private var droppedEarly = false
 
     /// Latest best text: sealed segments plus the live tail. / meilleur texte disponible maintenant.
     var liveText: String {
@@ -183,11 +183,22 @@ actor TranscriptCollector {
         return (finals + (tail.isEmpty ? [] : [tail])).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Call right before CloseStream is sent: from then on a close is the expected end. / une fermeture devient normale.
+    func markClosing() { closing = true }
+
     func read(_ task: URLSessionWebSocketTask) async {
         while !finished {
-            guard let message = try? await task.receive() else {
-                if task.closeCode != .normalClosure && task.closeCode != .invalid, error == nil, finals.isEmpty, current.isEmpty {
-                    error = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? "connection closed (\(task.closeCode.rawValue))"
+            let message: URLSessionWebSocketTask.Message
+            do { message = try await task.receive() }
+            catch {
+                if failure == nil {
+                    let code = task.closeCode
+                    if code != .invalid && code != .normalClosure {
+                        failure = Self.closeFailure(code: code.rawValue, reason: task.closeReason.flatMap { String(data: $0, encoding: .utf8) })
+                    } else if !closing {
+                        failure = ClaudeDictationFailure.classify(error, status: (task.response as? HTTPURLResponse)?.statusCode)
+                    }
+                    if !closing { droppedEarly = true }
                 }
                 finished = true; return
             }
@@ -199,19 +210,36 @@ actor TranscriptCollector {
             case "TranscriptInterim": interim = (object["data"] as? String) ?? interim
             case "TranscriptText": current = (object["data"] as? String) ?? current; interim = ""
             case "TranscriptEndpoint": if !current.isEmpty { finals.append(current); current = "" }; interim = ""
-            case "TranscriptError", "error":
-                let detail = (object["error"] as? [String: Any])?["message"] as? String
-                error = detail ?? (object["description"] as? String) ?? (object["error_code"] as? String) ?? type
+            case "TranscriptError", "error": failure = failure ?? Self.frameFailure(object)
             default: break
             }
         }
     }
 
-    func wait(seconds: Double) async -> (text: String, provider: String, error: String?) {
+    /// Final text, or the failure to report. A lost connection always fails, an error frame fails only without text.
+    func wait(seconds: Double) async -> TranscriptOutcome {
         let deadline = Date().addingTimeInterval(seconds)
         while !finished && Date() < deadline { try? await Task.sleep(nanoseconds: 20_000_000) }
-        let text = (finals + (current.isEmpty ? [] : [current])).joined(separator: " ")
-        return (text, provider, text.isEmpty ? error : nil)
+        let text = (finals + (current.isEmpty ? [] : [current])).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        if droppedEarly, let failure { return TranscriptOutcome(text: "", provider: provider, failure: failure) }
+        if text.isEmpty { return TranscriptOutcome(text: "", provider: provider, failure: failure ?? .empty) }
+        return TranscriptOutcome(text: text, provider: provider, failure: nil)
+    }
+
+    static func closeFailure(code: Int, reason: String?) -> ClaudeDictationFailure {
+        let text = reason ?? ""
+        if code == ClaudeVoiceTranscriber.Wire.busyCloseCode { return .busy }
+        if text.localizedCaseInsensitiveContains("authoriz") { return .unauthorized }
+        return .rejected(text.isEmpty ? "connexion fermée (code \(code))" : text)
+    }
+
+    static func frameFailure(_ object: [String: Any]) -> ClaudeDictationFailure {
+        let nested = object["error"] as? [String: Any]
+        let message = (nested?["message"] as? String) ?? (object["description"] as? String) ?? ""
+        let code = ((nested?["details"] as? [String: Any])?["error_code"] as? String) ?? (object["error_code"] as? String) ?? ""
+        if code == "rate_limit" || (object["limit"] as? String) == "concurrent" { return .busy }
+        if message.localizedCaseInsensitiveContains("authoriz") || code.contains("session_invalid") || code.contains("unauthor") { return .unauthorized }
+        return .rejected(message.isEmpty ? (code.isEmpty ? "erreur du serveur" : code) : message)
     }
 }
 
@@ -224,8 +252,9 @@ final class ClaudeLiveSession: @unchecked Sendable {
     private var reader: Task<Void, Never>!
     private let openedAt = Date()
 
-    init(preferences: DictationPreferences) throws {
-        task = URLSession.shared.webSocketTask(with: try ClaudeVoiceTranscriber.request(preferences: preferences, token: try ClaudeVoiceTranscriber.token(), live: true))
+    /// `token` must be valid now: the caller checks it, because opening with an expired token only fails after the recording.
+    init(preferences: DictationPreferences, token: String) throws {
+        task = URLSession.shared.webSocketTask(with: try ClaudeVoiceTranscriber.request(preferences: preferences, token: token, live: true))
         var cont: AsyncStream<Data>.Continuation!
         let chunks = AsyncStream<Data>(bufferingPolicy: .unbounded) { cont = $0 }
         continuation = cont
@@ -246,20 +275,19 @@ final class ClaudeLiveSession: @unchecked Sendable {
     /// The text available right now, without waiting for the server. / texte disponible immédiatement.
     func liveText() async -> String { await collector.liveText }
 
-    /// Sends CloseStream and waits for the final text.
+    /// Sends CloseStream and waits for the final text. Throws a typed failure, never a partial text.
     func finish() async throws -> TranscriptionResult {
+        await collector.markClosing()
         continuation.finish()
         await sender.value
         let outcome = await collector.wait(seconds: ClaudeVoiceTranscriber.Wire.liveFinalTimeoutSeconds)
         reader.cancel(); task.cancel(with: .normalClosure, reason: nil)
-        if let error = outcome.error {
-            if error.localizedCaseInsensitiveContains("authoriz") { ClaudeVoiceTranscriber.forgetToken() }
-            throw ClaudeVoiceTranscriber.Failure.rejected(error)
+        if let failure = outcome.failure {
+            if failure == .unauthorized { ClaudeCredentials.shared.forget() }
+            throw failure
         }
-        let text = outcome.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw ClaudeVoiceTranscriber.Failure.empty }
-        Log.write("Claude live dictation: \(outcome.provider), \(text.count) characters, session \(Int(Date().timeIntervalSince(openedAt) * 1000)) ms")
-        return TranscriptionResult(text: text, provider: "Claude " + outcome.provider)
+        Log.write("Claude live dictation: \(outcome.provider), \(outcome.text.count) characters, session \(Int(Date().timeIntervalSince(openedAt) * 1000)) ms")
+        return TranscriptionResult(text: outcome.text, provider: "Claude " + outcome.provider)
     }
 
     func cancel() { continuation.finish(); reader.cancel(); sender.cancel(); task.cancel(with: .goingAway, reason: nil) }

@@ -45,9 +45,22 @@ final class DictationCoordinator {
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); self.overlay.markCopied()
         }
         overlay.onInsert = { [weak self] in self?.insertLast() }
-        // Read the sign-in once at launch, off the main thread. / lit la connexion une fois au lancement.
-        Task.detached { _ = try? ClaudeVoiceTranscriber.token() }
+        overlay.onRetry = { [weak self] in self?.overlay.hide(); self?.retry() }
+        // 26 October 2026: keep the Claude sign-in fresh (it lasts about 8 h) so that pressing Fn never waits for a renewal.
+        upkeepSignIn()
+        Timer.scheduledTimer(withTimeInterval: ClaudeCredentials.shared.settings.checkInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.upkeepSignIn() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self?.upkeepSignIn() }   // the network needs a moment after wake
+        }
         overlay.onRedo = { [weak self] in self?.overlay.hide(); self?.toggleHandsFree() }
+    }
+    /// Renews the Claude sign-in in the background when less than 30 minutes remain. / renouvelle la connexion Claude en tâche de fond.
+    private func upkeepSignIn() {
+        let preferences = library.document.preferences
+        guard preferences.engine == .claude, !preferences.localOnly else { return }
+        Task.detached { await ClaudeCredentials.shared.keepFresh(cli: preferences.claudeExecutable) }
     }
     func pressFn() {
         fnHeld = true
@@ -107,12 +120,22 @@ final class DictationCoordinator {
             capture.gain = library.document.preferences.whisperMode ? 3 : 1
             live?.cancel(); live = nil; capture.onPCM16 = nil
             if usesLiveClaude {
-                do { let session = try ClaudeLiveSession(preferences: library.document.preferences); live = session; capture.onPCM16 = { session.feed($0) } }
-                catch { Log.write("Claude live session unavailable: \(error.localizedDescription); the file will be transcribed") }
+                let preferences = library.document.preferences
+                if let token = ClaudeCredentials.shared.validToken() {
+                    do { let session = try ClaudeLiveSession(preferences: preferences, token: token); live = session; capture.onPCM16 = { session.feed($0) } }
+                    catch { Log.write("Claude live session unavailable: \(error.localizedDescription); the file will be transcribed") }
+                } else {
+                    // Expired sign-in: record to a file anyway and renew it meanwhile; the file path waits for the renewal.
+                    Log.write("Claude sign-in expired: recording to a file while it is renewed")
+                    Task.detached { _ = try? await ClaudeCredentials.shared.freshToken(cli: preferences.claudeExecutable) }
+                }
             }
             _ = try capture.start(); state = .recording
             overlay.showRecording()
-        } catch { fail(error.localizedDescription); command = false }
+        } catch {
+            live?.cancel(); live = nil; capture.onPCM16 = nil      // never leave a socket open after a failed start
+            fail(error.localizedDescription); command = false
+        }
     }
     func stop() {
         pendingRelease?.cancel(); pendingRelease = nil
@@ -204,7 +227,10 @@ final class DictationCoordinator {
                 if let insertionError { fail(insertionError.localizedDescription) }
                 else if insert { overlay.showResult(output, insertable: destination != nil && !inserted) }
                 else { capsule.show((library.document.preferences.keepHistory ? "Saved to History · " : "Copied · ") + result.provider); dismissLater() }
-            } catch { state = .idle; command = false; handsFree = false; fail(error.localizedDescription + " Recording saved for retry.") }
+            } catch {
+                state = .idle; command = false; handsFree = false
+                fail(error.localizedDescription + (ownsAudio ? " Enregistrement conservé." : ""), retry: ownsAudio)
+            }
         }
     }
     private func format(_ text: String, mode: DictationMode, target: InsertionTarget?, command: Bool) async throws -> String {
@@ -225,10 +251,10 @@ final class DictationCoordinator {
         overlay.showTranscribing()
         return try await TranscriptionPipeline.rewrite(input,instruction:instruction,model:library.document.preferences.model)
     }
-    private func fail(_ message: String) {
+    private func fail(_ message: String, retry: Bool = false) {
         state = .idle; library.document.lastError = message
         do { try library.save() } catch { Log.write("Error state could not be saved: " + error.localizedDescription) }
-        overlay.showMessage(message); Log.write(message); onUpdate?()
+        overlay.showMessage(message, retry: retry && pendingURL != nil); Log.write(message); onUpdate?()
     }
     /// Live path: the text already received is shown at stop, then replaced by the final transcript if it differs.
     private func processLive(_ session: ClaudeLiveSession, _ audio: URL) {
@@ -249,27 +275,42 @@ final class DictationCoordinator {
                 }
             }
             if !shown { overlay.showTranscribing() }
-            do {
-                let result = try await session.finish()
-                let output = try await format(result.text, mode:selected, target:destination, command:isCommand)
-                copy(output); lastOutput = output; lastTarget = destination
-                var inserted = false
-                if library.document.preferences.autoInsert, let destination {
-                    do { try await destination.insert(output, restoreDelay: library.document.preferences.clipboardRestoreDelay); inserted = true }
-                    catch { Log.write("auto insert failed: \(error.localizedDescription)") }
+            let result: TranscriptionResult
+            do { result = try await session.finish() }
+            catch {
+                Log.write("live dictation failed: \(error.localizedDescription)")
+                // Nothing heard on a short recording: say so, a second try on the file would hear nothing either.
+                if let failure = error as? ClaudeDictationFailure, failure == .empty, audioBytes(audio) < Self.minSpeechBytes {
+                    try? FileManager.default.removeItem(at: audio)
+                    state = .idle; command = false; handsFree = false
+                    overlay.showMessage(failure.localizedDescription, title: "Rien entendu"); return
                 }
-                if shown { overlay.updateResult(output) } else { overlay.showResult(output, insertable: destination != nil && !inserted) }
-                Log.write("live final text \(elapsed()) ms after stop, \(output.count) characters")
-                library.document.lastError = nil
-                try library.record(raw:result.text,text:output,provider:result.provider,mode:selected.id,application:destination?.application.bundleIdentifier ?? "Unknown",audioURL:audio,inserted:inserted)
-                try? FileManager.default.removeItem(at: audio)
-                state = .idle; command = false; handsFree = false; onUpdate?()
-            } catch {
-                Log.write("live dictation failed: \(error.localizedDescription); transcribing the recorded file")
+                Log.write("transcribing the recorded file instead")
                 process(audio, insert: true)
+                return
             }
+            // A failing rewrite (custom modes) must not lose the transcript: fall back to the raw normalised text.
+            let output: String
+            do { output = try await format(result.text, mode:selected, target:destination, command:isCommand) }
+            catch { Log.write("formatting failed (\(error.localizedDescription)); using the raw text"); output = library.normalize(result.text) }
+            copy(output); lastOutput = output; lastTarget = destination
+            var inserted = false
+            if library.document.preferences.autoInsert, let destination {
+                do { try await destination.insert(output, restoreDelay: library.document.preferences.clipboardRestoreDelay); inserted = true }
+                catch { Log.write("auto insert failed: \(error.localizedDescription)") }
+            }
+            if shown { overlay.updateResult(output) } else { overlay.showResult(output, insertable: destination != nil && !inserted) }
+            Log.write("live final text \(elapsed()) ms after stop, \(output.count) characters")
+            library.document.lastError = nil
+            do { try library.record(raw:result.text,text:output,provider:result.provider,mode:selected.id,application:destination?.application.bundleIdentifier ?? "Unknown",audioURL:audio,inserted:inserted) }
+            catch { Log.write("history not saved: \(error.localizedDescription)") }
+            try? FileManager.default.removeItem(at: audio)
+            state = .idle; command = false; handsFree = false; onUpdate?()
         }
     }
+    /// Below this size (about 3 s of 16 kHz mono PCM16) an empty answer means silence, not a lost recording.
+    private static let minSpeechBytes: UInt64 = 96_000
+    private func audioBytes(_ url: URL) -> UInt64 { (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? UInt64) ?? 0 }
     private func copy(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
 
     /// « Insérer » pastes the last text into the field that had focus when Fn was pressed.

@@ -49,15 +49,34 @@ final class TranscriptionPipeline {
         try await gemini.rewrite(text, instruction: instruction, model: model)
     }
 
+    /// Runs `work` and gives up with a network failure after `seconds`. / abandonne après `seconds`.
+    static func withDeadline<T: Sendable>(seconds: Double, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask { try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)); throw ClaudeDictationFailure.network("délai de \(Int(seconds)) s dépassé") }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw ClaudeDictationFailure.empty }
+            return first
+        }
+    }
+
     func transcribe(audioURL: URL) async throws -> TranscriptionResult {
         let preferences = DictationLibrary.shared.document.preferences
         if preferences.engine == .parakeet { return try await LocalParakeetTranscriber().transcribe(audioURL: audioURL) }
         // 25 October 2026, 19:05 CEST: Claude voice_stream engine, with optional local fallback.
         if preferences.engine == .claude && !preferences.localOnly {
-            do { return try await ClaudeVoiceTranscriber().transcribe(audioURL: audioURL) }
-            catch {
+            do {
+                // A hard deadline: a hanging server or CLI must never keep Matthieu waiting without an answer. / délai maximal.
+                return try await Self.withDeadline(seconds: ClaudeVoiceTranscriber.Wire.fileDeadlineSeconds) {
+                    try await ClaudeVoiceTranscriber().transcribe(audioURL: audioURL)
+                }
+            } catch {
+                // Silence is final; any other failure (sign-in, server change, offline) falls back to the local Whisper.
+                if let failure = error as? ClaudeDictationFailure, !failure.allowsLocalFallback { throw error }
                 if !preferences.allowLocalFallback { throw error }
-                Log.write("Claude dictation unavailable: \(error.localizedDescription); trying local engine")
+                Log.write("Claude dictation unavailable: \(error.localizedDescription); trying the local Whisper")
+                let reason = error.localizedDescription
+                await MainActor.run { ClaudeHealth.shared.noteFallback(reason: reason) }
                 return try await local.transcribe(audioURL: audioURL)
             }
         }
@@ -74,6 +93,7 @@ final class TranscriptionPipeline {
 }
 
 private final class LocalWhisperTranscriber: @unchecked Sendable {
+    static let processTimeoutSeconds: Double = 90
 
 
     func transcribe(audioURL: URL) async throws -> TranscriptionResult {
@@ -118,6 +138,8 @@ private final class LocalWhisperTranscriber: @unchecked Sendable {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        // 26 October 2026: a hung local engine must end, or a dictation would wait forever. / un moteur local bloqué doit s'arrêter.
+        DispatchQueue.global().asyncAfter(deadline: .now() + Self.processTimeoutSeconds) { if process.isRunning { process.terminate() } }
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
