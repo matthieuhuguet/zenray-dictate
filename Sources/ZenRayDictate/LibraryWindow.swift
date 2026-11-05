@@ -4,10 +4,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 // 3 October 2026, 19:52 CEST: font families are defined once for the app library.
+// 5 November 2026: core font = Adobe Clean, numbers = GT Ultra.
 enum DictationTypography {
-    static let sans = "InterVariable"
+    static let sans = "AdobeClean-Regular"
     static let mono = "AnthropicMono"
-    static let numbers = "AnthropicSerif"
+    static let numbers = "GTUltra-Regular"
 }
 
 // 3 October 2026, 16:10 CEST: every mode, vocabulary rule and history operation is accessible in the app.

@@ -22,11 +22,11 @@ PARAMS = {
     'title': 'ZenRay Dictate',
     'subtitle': 'Dictée par la voix : Fn, parle, le texte arrive',
     'tag': 'harmonic-asr-8',
-    # 26 October 2026: default fonts = GT Ultra Regular (titles and numbers, free case, no tracking imposed), Literata (read text), GT Standard L (the rest of the UI).
+    # 5 November 2026: default fonts = GT Ultra Regular (titles and numbers), Adobe Clean (read text and UI).
     # Alternatives stay valid: set font_title to GT-Sectra-LCGV-Regular.otf, font_ui to InterVariable.ttf, etc.
     'font_title': '/Users/zenray/Library/Fonts/GT-Ultra-Standard-Regular.otf', 'title_case': 'none', 'title_track': 0.0,
-    'font_body': '/Users/zenray/Library/Fonts/Literata[opsz,wght].ttf', 'body_variation': 'Regular',
-    'font_ui': '/Users/zenray/Library/Fonts/GT-Standard-L-Standard-Regular.otf', 'ui_variation': None,
+    'font_body': '/Users/zenray/Library/Fonts/AdobeClean-Regular.otf', 'body_variation': None,
+    'font_ui': '/Users/zenray/Library/Fonts/AdobeClean-Regular.otf', 'ui_variation': None,
     'font_title_size': 100, 'font_subtitle_size': 38, 'font_label_size': 28, 'title_gap': 44,
     'margin': 90,
 }

@@ -345,7 +345,7 @@ private final class ComposerViewController: NSViewController {
         editor.isHorizontallyResizable = false
         editor.isVerticallyResizable = true
         editor.autoresizingMask = [.width]
-        editor.font = NSFont(name: "Inter", size: ComposerTokens.editorFontSize)
+        editor.font = NSFont(name: "AdobeClean-Regular", size: ComposerTokens.editorFontSize)
             ?? NSFont.systemFont(ofSize: ComposerTokens.editorFontSize)
         editor.textColor = .labelColor
         editor.insertionPointColor = .labelColor

@@ -38,10 +38,9 @@ final class ClaudeOverlay {
         static let clayDeep = NSColor(srgbRed: 184/255, green: 92/255, blue: 62/255, alpha: 1)
         static let ink = NSColor(srgbRed: 42/255, green: 38/255, blue: 34/255, alpha: 1)
         static let muted = NSColor(srgbRed: 124/255, green: 115/255, blue: 104/255, alpha: 1)
-        // 26 October 2026: default fonts. Titles and every number = GT Ultra Regular, read text = Literata, the rest of the UI = GT Standard L.
-        // The earlier drawings (GT Sectra, Anthropic Serif, Inter) stay valid alternatives: change these four names only.
-        // FR : polices par défaut ; titres et nombres en GT Ultra, texte reçu en Literata, reste de l'interface en GT Standard L.
-        static let titleFont = "GTUltra-Regular", textFont = "Literata-Regular", uiFont = "GTStandard-LRegular", numberFont = "GTUltra-Regular"
+        // 5 November 2026: default fonts. Core font = Adobe Clean. Text received = Adobe Clean with numbers in GT Ultra Regular; titles and numbers/timer = GT Ultra Regular; UI = Adobe Clean.
+        // FR : polices par défaut ; police core = Adobe Clean, texte reçu en Adobe Clean avec nombres en GT Ultra, titres et timer en GT Ultra, UI en Adobe Clean.
+        static let titleFont = "GTUltra-Regular", textFont = "AdobeClean-Regular", uiFont = "AdobeClean-Regular", numberFont = "GTUltra-Regular"
     }
 
     var onInsert: (() -> Void)?
@@ -219,9 +218,28 @@ final class ClaudeOverlay {
         for view in [titleLabel, textLabel, actions] as [NSView] { glass.addSubview(view) }
     }
 
+    /// Formats the dictated text module with Adobe Clean for letters and GT Ultra Regular for all numbers.
+    static func formattedText(_ text: String) -> NSAttributedString {
+        let baseFont = NSFont(name: Tokens.textFont, size: Tokens.textSize) ?? .systemFont(ofSize: Tokens.textSize)
+        let numFont = NSFont(name: Tokens.numberFont, size: Tokens.textSize) ?? .systemFont(ofSize: Tokens.textSize)
+        let attr = NSMutableAttributedString(string: text, attributes: [
+            .font: baseFont,
+            .foregroundColor: Tokens.ink
+        ])
+        if let regex = try? NSRegularExpression(pattern: "\\d+", options: []) {
+            let nsString = text as NSString
+            let matches = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+            for match in matches {
+                attr.addAttribute(.font, value: numFont, range: match.range)
+            }
+        }
+        return attr
+    }
+
     private func present(title: String, text: String, showCopy: Bool, showInsert: Bool, showRetry: Bool = false, animate: Bool = true) {
         tick?.invalidate(); tick = nil; stopPulse(); fadeOut(capsule)
-        titleLabel.stringValue = title; textLabel.stringValue = text
+        titleLabel.stringValue = title
+        textLabel.attributedStringValue = Self.formattedText(text)
         copyButton.setTitle(showCopy ? "Copié" : "Copier")
         actions.views[0].isHidden = !showCopy; actions.views[1].isHidden = !showInsert
         actions.views[2].isHidden = showRetry; actions.views[3].isHidden = !showRetry

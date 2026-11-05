@@ -1,5 +1,9 @@
 ![ZenRay Dictate: the recording capsule on the right and the result card at the bottom, both in Claude orange](docs/ZenRayDictate-sheet.png)
 
+## 5 November 2026: Adobe Clean core font, GT Ultra numbers in text module (version 3.17)
+
+The core font of the interface becomes Adobe Clean (`AdobeClean-Regular`): received transcription text, Composer window editor, dictation library sans font, and UI labels. Titles and every number (the timer, the title of the presentation sheet, and any digit in the transcribed text card) remain set in GT Ultra Regular (`GTUltra-Regular`). In `ClaudeOverlay`, `formattedText(_:)` dynamically formats all numbers in GT Ultra Regular while retaining Adobe Clean for words and punctuation, ensuring optimal typographic contrast. `build.sh` packages the Adobe Clean font drawings (`AdobeClean-Regular.otf`, `Bold`, `Medium`) into `$APP/Contents/Resources/Fonts/`. (5 November 2026)
+
 ## 26 October 2026: GT Ultra, Literata and GT Standard L by default (version 3.16)
 
 The received text of the card is set in Literata. Titles and every number (the timer, the title of the presentation sheet) are set in GT Ultra Regular, free case and no imposed letter spacing; the rest of the interface (buttons, labels) is GT Standard L Regular. They are the default fonts; GT Sectra, Anthropic Serif and Inter stay valid alternatives. The four font names are `ClaudeOverlay.Tokens.titleFont`, `textFont`, `uiFont`, `numberFont`, and `build.sh` bundles the drawings. `Scripts/MakeSheet.py` carries the same choice in `PARAMS`. (26 October 2026)
